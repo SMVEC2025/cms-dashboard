@@ -3,9 +3,78 @@ import { requireSupabase } from '@/lib/supabase';
 const mediaFunctionName = import.meta.env.VITE_SUPABASE_MEDIA_FUNCTION || 'r2-upload';
 const mediaUploadUrl = import.meta.env.VITE_MEDIA_UPLOAD_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const IMAGE_MIME_PREFIX = 'image/';
+const IMAGE_MAX_DIMENSION = 1920;
+const IMAGE_WEBP_QUALITY = 0.82;
 
 function isAbsoluteUrl(value) {
   return /^https?:\/\//i.test(value || '');
+}
+
+function shouldProcessImage(file) {
+  return Boolean(file?.type?.startsWith(IMAGE_MIME_PREFIX));
+}
+
+function buildWebpFileName(name = 'image') {
+  const baseName = name.replace(/\.[^.]+$/, '') || 'image';
+  return `${baseName}.webp`;
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Image could not be decoded for compression.'));
+    };
+
+    image.src = objectUrl;
+  });
+}
+
+async function compressImageFile(file) {
+  if (!shouldProcessImage(file)) {
+    return file;
+  }
+
+  try {
+    const image = await loadImageFromFile(file);
+    const scale = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(image.width, image.height));
+    const targetWidth = Math.max(1, Math.round(image.width * scale));
+    const targetHeight = Math.max(1, Math.round(image.height * scale));
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      return file;
+    }
+
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob(resolve, 'image/webp', IMAGE_WEBP_QUALITY);
+    });
+
+    if (!blob) {
+      return file;
+    }
+
+    return new File([blob], buildWebpFileName(file.name), {
+      type: 'image/webp',
+      lastModified: Date.now(),
+    });
+  } catch {
+    return file;
+  }
 }
 
 async function uploadToAbsoluteUrl(url, formData, headers = {}) {
@@ -55,7 +124,7 @@ function deriveBucketKey(payload, fallbackFolder) {
   return `${fallbackFolder}/${payload?.fileName || crypto.randomUUID()}`;
 }
 
-async function ensureMediaAssetMetadata({ client, session, payload, folder, file }) {
+async function ensureMediaAssetMetadata({ client, session, payload, folder, file, folderId }) {
   if (payload?.id || !session?.user?.id || !payload?.publicUrl) {
     return payload;
   }
@@ -85,6 +154,7 @@ async function ensureMediaAssetMetadata({ client, session, payload, folder, file
     mime_type: payload.mimeType || file.type || 'application/octet-stream',
     size_bytes: payload.sizeBytes || file.size || 0,
     context: payload.context || folder,
+    folder_id: folderId || null,
     metadata: {
       source: 'browser-media-metadata-fallback',
     },
@@ -92,7 +162,7 @@ async function ensureMediaAssetMetadata({ client, session, payload, folder, file
 
   const { data: existingAsset } = await client
     .from('media_assets')
-    .select('id, public_url, file_name, mime_type, size_bytes, context, created_at')
+    .select('id, public_url, file_name, mime_type, size_bytes, context, folder_id, created_at')
     .eq('bucket_key', bucketKey)
     .maybeSingle();
 
@@ -104,6 +174,7 @@ async function ensureMediaAssetMetadata({ client, session, payload, folder, file
       mimeType: existingAsset.mime_type,
       sizeBytes: existingAsset.size_bytes,
       context: existingAsset.context,
+      folderId: existingAsset.folder_id,
       createdAt: existingAsset.created_at,
       key: bucketKey,
       provider: rowPayload.storage_provider,
@@ -113,7 +184,7 @@ async function ensureMediaAssetMetadata({ client, session, payload, folder, file
   const { data: asset, error: insertError } = await client
     .from('media_assets')
     .insert(rowPayload)
-    .select('id, public_url, file_name, mime_type, size_bytes, context, created_at')
+    .select('id, public_url, file_name, mime_type, size_bytes, context, folder_id, created_at')
     .single();
 
   if (insertError) {
@@ -127,15 +198,17 @@ async function ensureMediaAssetMetadata({ client, session, payload, folder, file
     mimeType: asset.mime_type,
     sizeBytes: asset.size_bytes,
     context: asset.context,
+    folderId: asset.folder_id,
     createdAt: asset.created_at,
     key: bucketKey,
     provider: rowPayload.storage_provider,
   };
 }
 
-export async function uploadMedia({ file, folder = 'posts' }) {
+export async function uploadMedia({ file, folder = 'posts', folderId = null }) {
+  const uploadFile = await compressImageFile(file);
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append('file', uploadFile);
   formData.append('folder', folder);
 
   const client = requireSupabase();
@@ -156,7 +229,8 @@ export async function uploadMedia({ file, folder = 'posts' }) {
         session,
         payload,
         folder,
-        file,
+        file: uploadFile,
+        folderId,
       });
     } catch (error) {
       if (error instanceof TypeError) {
@@ -198,19 +272,34 @@ function mapMediaAsset(asset) {
     uploadedAt: asset.created_at,
     createdAt: asset.created_at,
     context: asset.context,
+    folderId: asset.folder_id || null,
     metadata: asset.metadata || {},
   };
 }
 
-export async function listMediaAssets({ imageOnly = false } = {}) {
+export async function listMediaAssets({
+  imageOnly = false,
+  folderId = undefined,
+  contexts = undefined,
+} = {}) {
   const client = requireSupabase();
   let query = client
     .from('media_assets')
-    .select('id, public_url, file_name, mime_type, size_bytes, context, metadata, created_at')
+    .select('id, public_url, file_name, mime_type, size_bytes, context, folder_id, metadata, created_at')
     .order('created_at', { ascending: false });
 
   if (imageOnly) {
     query = query.like('mime_type', 'image/%');
+  }
+
+  if (folderId !== undefined) {
+    query = folderId ? query.eq('folder_id', folderId) : query.is('folder_id', null);
+  }
+
+  if (Array.isArray(contexts) && contexts.length) {
+    query = contexts.length === 1
+      ? query.eq('context', contexts[0])
+      : query.in('context', contexts);
   }
 
   const { data, error } = await query;
@@ -220,4 +309,92 @@ export async function listMediaAssets({ imageOnly = false } = {}) {
   }
 
   return (data || []).map(mapMediaAsset);
+}
+
+export async function deleteMediaAsset(id) {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('media_assets')
+    .delete()
+    .eq('id', id)
+    .select('id');
+
+  if (error) throw error;
+
+  if (!data?.length) {
+    throw new Error('Media asset could not be deleted. Check the Supabase delete policy for media_assets.');
+  }
+}
+
+export async function moveAssetToFolder(assetId, folderId) {
+  const client = requireSupabase();
+  const { error } = await client
+    .from('media_assets')
+    .update({ folder_id: folderId || null })
+    .eq('id', assetId);
+  if (error) throw error;
+}
+
+/* ── Folder operations ── */
+
+function mapFolder(row) {
+  return {
+    id: row.id,
+    parentId: row.parent_id,
+    name: row.name,
+    createdAt: row.created_at,
+  };
+}
+
+export async function listFolders() {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('media_folders')
+    .select('id, parent_id, name, created_at')
+    .order('name', { ascending: true });
+
+  if (error) throw error;
+  return (data || []).map(mapFolder);
+}
+
+export async function createFolder({ name, parentId = null }) {
+  const client = requireSupabase();
+  const {
+    data: { session },
+  } = await client.auth.getSession();
+
+  const { data: profile } = await client
+    .from('profiles')
+    .select('selected_college_id')
+    .eq('id', session.user.id)
+    .single();
+
+  const { data, error } = await client
+    .from('media_folders')
+    .insert({
+      college_id: profile.selected_college_id,
+      parent_id: parentId || null,
+      name: name.trim(),
+      created_by: session.user.id,
+    })
+    .select('id, parent_id, name, created_at')
+    .single();
+
+  if (error) throw error;
+  return mapFolder(data);
+}
+
+export async function renameFolder(id, name) {
+  const client = requireSupabase();
+  const { error } = await client
+    .from('media_folders')
+    .update({ name: name.trim() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteFolder(id) {
+  const client = requireSupabase();
+  const { error } = await client.from('media_folders').delete().eq('id', id);
+  if (error) throw error;
 }

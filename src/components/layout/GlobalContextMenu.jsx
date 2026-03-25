@@ -30,8 +30,10 @@ function GlobalContextMenu() {
     x: 0,
     y: 0,
   });
+  const [customActionGroups, setCustomActionGroups] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const menuRef = useRef(null);
+  const skipNextNativeContextMenuRef = useRef(false);
 
   const shortcutMeta = useMemo(() => getPlatformMetaKey(), []);
   const shortcuts = useMemo(
@@ -58,12 +60,13 @@ function GlobalContextMenu() {
   };
 
   const closeContextMenu = () => {
+    setCustomActionGroups(null);
     setMenuState((current) => ({ ...current, open: false }));
   };
 
   const isEditorRoute = /^\/(posts|blogs)\/(new|[^/]+\/edit)$/.test(location.pathname);
 
-  const actionGroups = useMemo(
+  const defaultActionGroups = useMemo(
     () => [
       [
         {
@@ -136,11 +139,31 @@ function GlobalContextMenu() {
     ],
     [isEditorRoute, navigate, shortcuts, signOut],
   );
+  const actionGroups = customActionGroups
+    ? [...customActionGroups, ...defaultActionGroups]
+    : defaultActionGroups;
 
   useEffect(() => {
     const handleContextMenu = (event) => {
+      if (skipNextNativeContextMenuRef.current) {
+        skipNextNativeContextMenuRef.current = false;
+        return;
+      }
+
       event.preventDefault();
+      setCustomActionGroups(null);
       openContextMenu(event.clientX, event.clientY);
+    };
+
+    const handleCustomContextMenu = (event) => {
+      const { x, y, groups } = event.detail || {};
+      if (!Array.isArray(groups) || !groups.length) {
+        return;
+      }
+
+      skipNextNativeContextMenuRef.current = true;
+      setCustomActionGroups(groups);
+      openContextMenu(x ?? MENU_PADDING, y ?? MENU_PADDING);
     };
 
     const handlePointerDown = (event) => {
@@ -199,6 +222,7 @@ function GlobalContextMenu() {
     };
 
     window.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('cms:open-context-menu', handleCustomContextMenu);
     window.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('resize', handleViewportChange);
     window.addEventListener('scroll', handleViewportChange, true);
@@ -206,6 +230,7 @@ function GlobalContextMenu() {
 
     return () => {
       window.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('cms:open-context-menu', handleCustomContextMenu);
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('resize', handleViewportChange);
       window.removeEventListener('scroll', handleViewportChange, true);
@@ -246,7 +271,7 @@ function GlobalContextMenu() {
                     <button
                       key={item.id}
                       type="button"
-                      className="global-context-menu__item"
+                      className={`global-context-menu__item ${item.destructive ? 'global-context-menu__item--danger' : ''}`}
                       onClick={() => {
                         item.onSelect();
                         closeContextMenu();

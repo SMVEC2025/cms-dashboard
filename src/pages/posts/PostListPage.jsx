@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { FiSearch, FiArrowRight } from 'react-icons/fi';
+import { FiSearch, FiArrowRight, FiEye } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import EmptyState from '@/components/common/EmptyState';
 import StatusBadge from '@/components/common/StatusBadge';
@@ -8,7 +8,7 @@ import CustomSelect from '@/components/ui/CustomSelect';
 import { useAuth } from '@/hooks/useAuth';
 import { POST_STATUS } from '@/lib/constants';
 import { formatDate, formatPostTypeLabel, getCollegeName } from '@/lib/utils';
-import { listPosts } from '@/services/postsService';
+import { getPostById, listPosts } from '@/services/postsService';
 
 const filterOptions = [
   { value: '', label: 'All statuses' },
@@ -35,7 +35,7 @@ function SkeletonRow() {
 
 function PostListPage() {
   const location = useLocation();
-  const { profile, user } = useAuth();
+  const { profile, user, selectedCollegeName } = useAuth();
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [posts, setPosts] = useState([]);
@@ -72,6 +72,21 @@ function PostListPage() {
     [isBlogsView],
   );
 
+  const openPreview = async (postId) => {
+    try {
+      const post = await getPostById(postId, { sourceTable: isBlogsView ? 'blogs' : 'posts' });
+      const previewData = {
+        ...post,
+        tags: post.tags || [],
+        collegeName: selectedCollegeName || getCollegeName(post.college_id),
+      };
+      sessionStorage.setItem('cms-preview', JSON.stringify(previewData));
+      window.open('/preview', '_blank');
+    } catch {
+      toast.error('Failed to load preview.');
+    }
+  };
+
   useEffect(() => {
     const loadPosts = async () => {
       if (!role || !userId) return;
@@ -81,6 +96,7 @@ function PostListPage() {
           role, userId, collegeId, status,
           search: deferredSearch,
           postType: isBlogsView ? 'blog' : undefined,
+          sourceTable: isBlogsView ? 'blogs' : 'posts',
         });
         setPosts(data);
       } catch (error) {
@@ -165,6 +181,14 @@ function PostListPage() {
                     <td><StatusBadge status={post.status} /></td>
                     <td className="post-table__date">{formatDate(post.updated_at)}</td>
                     <td className="post-table__action-cell">
+                      <button
+                        type="button"
+                        className="post-table__preview-btn"
+                        onClick={() => openPreview(post.id)}
+                        title="Preview"
+                      >
+                        <FiEye size={14} />
+                      </button>
                       <Link
                         className="post-table__edit-btn"
                         to={`${copy.editBasePath}/${post.id}/edit`}

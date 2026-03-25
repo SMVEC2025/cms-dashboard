@@ -73,6 +73,7 @@ function ReviewQueuePage() {
         reviewerId: user.id,
         status,
         reviewNotes,
+        sourceTable: activePost.source_table,
       });
       toast.success(`Post updated: ${status.replace('_', ' ')}.`);
       await loadQueue();

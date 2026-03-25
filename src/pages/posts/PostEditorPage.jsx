@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import CustomSelect from '@/components/ui/CustomSelect';
 import DatePickerField from '@/components/common/DatePickerField';
+import EditorImagePicker from '@/components/editor/EditorImagePicker';
 import RichTextEditor from '@/components/editor/RichTextEditor';
 import StatusBadge from '@/components/common/StatusBadge';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,6 +17,7 @@ import {
   submitPost,
   updatePostFeaturedImage,
 } from '@/services/postsService';
+import { IoMdClose } from "react-icons/io";
 
 const defaultValues = {
   post_type: 'event',
@@ -36,7 +38,6 @@ const defaultValues = {
 const TABS = [
   { id: 'content', label: 'Content' },
   { id: 'meta', label: 'Meta' },
-  { id: 'seo', label: 'SEO' },
 ];
 
 function PostEditorPage() {
@@ -45,6 +46,8 @@ function PostEditorPage() {
   const { postId } = useParams();
   const { profile, user, selectedCollegeName } = useAuth();
   const isBlogRoute = location.pathname.startsWith('/blogs');
+  const isNewPostRoute = !postId && !isBlogRoute;
+  const sourceTable = isBlogRoute ? 'blogs' : 'posts';
   const importInputRef = useRef(null);
   const previewHandlerRef = useRef(null);
   const persistHandlerRef = useRef(null);
@@ -53,6 +56,7 @@ function PostEditorPage() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('content');
   const [featuredUploading, setFeaturedUploading] = useState(false);
+  const [featuredPickerOpen, setFeaturedPickerOpen] = useState(false);
   const [importingContent, setImportingContent] = useState(false);
   const [featuredAsset, setFeaturedAsset] = useState(null);
   const [existingPost, setExistingPost] = useState(null);
@@ -78,6 +82,9 @@ function PostEditorPage() {
   const selectedPostType = watchedValues.post_type || defaultValues.post_type;
   const isEventPost = selectedPostType === 'event';
   const isBlogPost = selectedPostType === 'blog';
+  const editorPostTypeOptions = isBlogRoute
+    ? POST_TYPES.filter((option) => option.value === 'blog')
+    : POST_TYPES.filter((option) => option.value !== 'blog');
 
   const handleEventDateChange = (nextValue) => {
     setValue('event_date', nextValue, {
@@ -91,7 +98,7 @@ function PostEditorPage() {
     const loadPost = async () => {
       try {
         setLoading(true);
-        const post = await getPostById(postId);
+        const post = await getPostById(postId, { sourceTable });
         setExistingPost(post);
         setValue('post_type', post.post_type);
         setValue('title', post.title);
@@ -118,7 +125,7 @@ function PostEditorPage() {
       }
     };
     loadPost();
-  }, [postId, setValue]);
+  }, [postId, setValue, sourceTable]);
 
   useEffect(() => {
     if (manualSlug) return;
@@ -148,36 +155,81 @@ function PostEditorPage() {
     }
   }, [isBlogRoute, setValue, watch]);
 
-  const handleFeaturedUpload = async (event) => {
-    const file = event.target.files?.[0];
+  const uploadFeaturedAsset = async (file) => {
     if (!file) return;
+    setFeaturedUploading(true);
     try {
-      setFeaturedUploading(true);
-      const asset = await uploadMedia({ file, folder: 'featured-images' });
-      setFeaturedAsset(asset);
-      setValue('featured_image_url', asset.publicUrl, { shouldDirty: true });
-      if (existingPost?.id) {
+      return await uploadMedia({ file, folder: 'featured-images' });
+    } finally {
+      setFeaturedUploading(false);
+    }
+  };
+
+  const applyFeaturedAsset = async (asset, successMessage = 'Featured image updated.') => {
+    if (!asset?.publicUrl) return;
+
+    setFeaturedAsset(asset);
+    setValue('featured_image_url', asset.publicUrl, { shouldDirty: true });
+
+    if (existingPost?.id) {
         const updatedPost = await updatePostFeaturedImage({
           postId: existingPost.id,
           authorId: existingPost.author_id || user.id,
           featuredImageUrl: asset.publicUrl,
           featuredImageAssetId: asset.id,
+          sourceTable,
+        });
+      setExistingPost(updatedPost);
+    }
+
+    if (successMessage) {
+      toast.success(successMessage);
+    }
+  };
+
+  const handleFeaturedImageSelect = async (asset) => {
+    try {
+      await applyFeaturedAsset(asset, 'Featured image selected.');
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleRemoveFeaturedImage = async () => {
+    try {
+      setFeaturedAsset(null);
+      setValue('featured_image_url', '', { shouldDirty: true });
+
+      if (existingPost?.id) {
+        const updatedPost = await updatePostFeaturedImage({
+          postId: existingPost.id,
+          authorId: existingPost.author_id || user.id,
+          featuredImageUrl: null,
+          featuredImageAssetId: null,
+          sourceTable,
         });
         setExistingPost(updatedPost);
       }
-      toast.success('Featured image uploaded.');
+
+      toast.success('Featured image removed.');
     } catch (error) {
       toast.error(error.message);
-    } finally {
-      setFeaturedUploading(false);
-      event.target.value = '';
+    }
+  };
+
+  const handleFeaturedImageUpload = async (file) => {
+    try {
+      const asset = await uploadFeaturedAsset(file);
+      await applyFeaturedAsset(asset, null);
+      return asset;
+    } catch (error) {
+      toast.error(error.message);
+      throw error;
     }
   };
 
   const handleEditorImageUpload = async (file) => {
-    const asset = await uploadMedia({ file, folder: 'editor-media' });
-    toast.success('Inline image uploaded.');
-    return asset;
+    return uploadMedia({ file, folder: 'editor-media' });
   };
 
   const openPreview = () => {
@@ -333,6 +385,16 @@ function PostEditorPage() {
       className="cms-editor"
       onSubmit={handleSubmit(() => persistPost('draft'))}
     >
+      <EditorImagePicker
+        open={featuredPickerOpen}
+        onClose={() => setFeaturedPickerOpen(false)}
+        onInsert={handleFeaturedImageSelect}
+        onUpload={handleFeaturedImageUpload}
+        eyebrow="Featured Image"
+        title="Choose featured image"
+        confirmLabel="Use as featured image"
+        ariaLabel="Choose featured image"
+      />
       <input type="hidden" {...eventDateField} />
       <input
         ref={importInputRef}
@@ -350,13 +412,15 @@ function PostEditorPage() {
           {...register('title', { required: 'Title is required.' })}
         />
         <div className="cms-editor__title-actions">
-          <CustomSelect
-            className="cms-editor__type-select"
-            value={watch('post_type')}
-            onChange={val => setValue('post_type', val, { shouldValidate: true })}
-            options={POST_TYPES}
-            disabled={isBlogRoute}
-          />
+          {!isNewPostRoute && (
+            <CustomSelect
+              className="cms-editor__type-select"
+              value={watch('post_type')}
+              onChange={val => setValue('post_type', val, { shouldValidate: true })}
+              options={editorPostTypeOptions}
+              disabled={isBlogRoute}
+            />
+          )}
 
           <button
             type="button"
@@ -457,32 +521,60 @@ function PostEditorPage() {
                 </div>
                 <div className="cms-block__content">
                   <div className="cms-upload-zone">
-                    <span className="cms-upload-zone__label">Upload image*</span>
-                    <label className="cms-upload-zone__droparea">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        hidden
-                        onChange={handleFeaturedUpload}
-                      />
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <polyline points="21 15 16 10 5 21" />
-                      </svg>
-                      <span>
-                        {featuredUploading
-                          ? 'Uploading...'
-                          : 'Upload a file or drag and drop'}
+                    <div className="cms-upload-zone__top">
+                      <div>
+                        <span className="cms-upload-zone__label">Featured image*</span>
+                        <p className="cms-upload-zone__helper">
+                          Choose an image from your media library or upload a new one for this post.
+                        </p>
+                      </div>
+                      
+                    </div>
+                    <button
+                      type="button"
+                      className="cms-upload-zone__droparea"
+                      onClick={() => setFeaturedPickerOpen(true)}
+                    >
+                      <span className="cms-upload-zone__dropicon">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                          <circle cx="8.5" cy="8.5" r="1.5" />
+                          <polyline points="21 15 16 10 5 21" />
+                        </svg>
                       </span>
-                    </label>
+                      <span className="cms-upload-zone__copy">
+                        <strong>
+                          {featuredUploading ? 'Uploading...' : 'Choose from gallery or upload an image'}
+                        </strong>
+                        <small>Recommended landscape image for cards and preview pages.</small>
+                      </span>
+                      <span className="cms-upload-zone__trigger">Browse media</span>
+                    </button>
                     {watchedValues.featured_image_url && (
-                      <div className="cms-upload-zone__preview">
+                      <button
+                        type="button"
+                        className="cms-upload-zone__preview"
+                        onClick={() => setFeaturedPickerOpen(true)}
+                      >
+                        <span className="cms-upload-zone__preview-badge">Featured image</span>
+                        <button
+                          type="button"
+                          className="cms-upload-zone__preview-remove"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            handleRemoveFeaturedImage();
+                          }}
+                          aria-label="Remove featured image"
+                          title="Remove featured image"
+                        >
+                          <IoMdClose />
+                        </button>
                         <img
                           src={watchedValues.featured_image_url}
                           alt="Featured"
                         />
-                      </div>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -575,7 +667,7 @@ function PostEditorPage() {
                       <p>
                         Blogs and news posts do not require event schedule, venue,
                         or organizer details. Focus on the article summary, category,
-                        tags, featured image, and SEO fields.
+                        tags, and featured image.
                       </p>
                     </div>
                   )}
@@ -590,55 +682,6 @@ function PostEditorPage() {
             </div>
           )}
 
-          {/* SEO Tab */}
-          {activeTab === 'seo' && (
-            <div className="cms-block">
-              <div className="cms-block__header">
-                <div className="cms-block__title-group">
-                  <span className="cms-block__indicator" />
-                  <span className="cms-block__label">
-                    Search Engine Optimization
-                  </span>
-                </div>
-              </div>
-              <div className="cms-block__content">
-                <div className="cms-field-grid cms-field-grid--single">
-                  <label className="field-group">
-                    <span>SEO title</span>
-                    <input
-                      type="text"
-                      placeholder="SEO title for search listings"
-                      {...register('seo_title')}
-                    />
-                  </label>
-                  <label className="field-group">
-                    <span>SEO description</span>
-                    <textarea
-                      rows={3}
-                      placeholder="Search-friendly description for the post"
-                      {...register('seo_description')}
-                    />
-                  </label>
-                </div>
-                <div className="cms-seo-preview">
-                  <span className="cms-seo-preview__label">Search Preview</span>
-                  <h4 className="cms-seo-preview__title">
-                    {watchedValues.seo_title ||
-                      watchedValues.title ||
-                      'Page title'}
-                  </h4>
-                  <p className="cms-seo-preview__url">
-                    example.com/{watchedValues.slug || 'page-slug'}
-                  </p>
-                  <p className="cms-seo-preview__desc">
-                    {watchedValues.seo_description ||
-                      watchedValues.summary ||
-                      'Page description will appear here...'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* ── Right Sidebar ── */}

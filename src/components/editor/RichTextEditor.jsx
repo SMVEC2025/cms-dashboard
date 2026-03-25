@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BubbleMenu, EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -11,6 +11,7 @@ import Color from '@tiptap/extension-color';
 import clsx from 'clsx';
 import CustomSelect from '@/components/ui/CustomSelect';
 import EditorColorPicker from './EditorColorPicker';
+import EditorImagePicker from './EditorImagePicker';
 import EditorToolbar from './EditorToolbar';
 import { FONT_FAMILIES, FONT_SIZES } from './editorToolbarOptions';
 import AlignedImage from './AlignedImage';
@@ -47,8 +48,7 @@ function BubbleBtn({ active, onClick, children, title }) {
 }
 
 function RichTextEditor({ value, onChange, onImageUpload }) {
-  const inputRef = useRef(null);
-  const [uploadInProgress, setUploadInProgress] = useState(false);
+  const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -84,19 +84,20 @@ function RichTextEditor({ value, onChange, onImageUpload }) {
     editor.commands.setContent(nextValue, true);
   }, [editor, value]);
 
-  const handleInlineImage = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file || !editor) return;
-    try {
-      setUploadInProgress(true);
-      const asset = await onImageUpload(file);
-      editor.chain().focus().setAlignedImage({
-        src: asset.publicUrl, alt: file.name, title: file.name, align: 'center',
-      }).run();
-    } finally {
-      setUploadInProgress(false);
-      event.target.value = '';
-    }
+  const handleInsertImage = (asset) => {
+    if (!asset || !editor) return;
+
+    const assetName = asset.fileName || asset.name || 'Image';
+    const assetUrl = asset.publicUrl || asset.url;
+    if (!assetUrl) return;
+
+    editor.chain().focus().setAlignedImage({
+      src: assetUrl,
+      alt: assetName,
+      title: assetName,
+      align: 'left',
+      width: '56%',
+    }).run();
   };
 
   const handleSetLink = () => {
@@ -111,19 +112,90 @@ function RichTextEditor({ value, onChange, onImageUpload }) {
   const currentFontFamily = editor?.getAttributes('textStyle').fontFamily || 'Inter';
   const currentFontSize = editor?.getAttributes('textStyle').fontSize || '16px';
   const currentColor = editor?.getAttributes('textStyle').color || '#111827';
+  const isImageSelection = editor?.isActive('image');
+  const currentImageAlign = editor?.getAttributes('image').align || 'left';
+  const currentImageWidth = editor?.getAttributes('image').width || '56%';
 
   return (
     <div className="editor-surface">
       <EditorToolbar
         editor={editor}
-        onImageSelect={() => inputRef.current?.click()}
-        uploadInProgress={uploadInProgress}
+        onImageSelect={() => setIsImagePickerOpen(true)}
+      />
+      <EditorImagePicker
+        open={isImagePickerOpen}
+        onClose={() => setIsImagePickerOpen(false)}
+        onInsert={handleInsertImage}
+        onUpload={onImageUpload}
       />
 
-      <input ref={inputRef} type="file" accept="image/*" hidden onChange={handleInlineImage} />
-
       {editor && (
-        <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }} className="bubble-menu">
+        <BubbleMenu
+          editor={editor}
+          tippyOptions={{ duration: 100 }}
+          shouldShow={({ editor, state }) => {
+            const { from, to } = state.selection;
+            return editor.isActive('image') || from !== to;
+          }}
+          className="bubble-menu"
+        >
+          {isImageSelection ? (
+            <>
+              <div className="bubble-menu__group">
+                <BubbleBtn
+                  active={currentImageAlign === 'left'}
+                  onClick={() => editor.chain().focus().setImageAlign('left').run()}
+                  title="Image align left"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="17" y1="10" x2="3" y2="10" /><line x1="21" y1="6" x2="3" y2="6" />
+                    <line x1="21" y1="14" x2="3" y2="14" /><line x1="17" y1="18" x2="3" y2="18" />
+                  </svg>
+                </BubbleBtn>
+                <BubbleBtn
+                  active={currentImageAlign === 'center'}
+                  onClick={() => editor.chain().focus().setImageAlign('center').run()}
+                  title="Image align center"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="18" y1="10" x2="6" y2="10" /><line x1="21" y1="6" x2="3" y2="6" />
+                    <line x1="21" y1="14" x2="3" y2="14" /><line x1="18" y1="18" x2="6" y2="18" />
+                  </svg>
+                </BubbleBtn>
+                <BubbleBtn
+                  active={currentImageAlign === 'right'}
+                  onClick={() => editor.chain().focus().setImageAlign('right').run()}
+                  title="Image align right"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <line x1="21" y1="10" x2="7" y2="10" /><line x1="21" y1="6" x2="3" y2="6" />
+                    <line x1="21" y1="14" x2="3" y2="14" /><line x1="21" y1="18" x2="7" y2="18" />
+                  </svg>
+                </BubbleBtn>
+              </div>
+
+              <span className="bubble-menu__divider" />
+
+              <div className="bubble-menu__group">
+                {[
+                  { label: 'S', value: '38%' },
+                  { label: 'M', value: '56%' },
+                  { label: 'L', value: '72%' },
+                  { label: 'XL', value: '100%' },
+                ].map((option) => (
+                  <BubbleBtn
+                    key={option.value}
+                    active={currentImageWidth === option.value}
+                    onClick={() => editor.chain().focus().setImageWidth(option.value).run()}
+                    title={`Image width ${option.value}`}
+                  >
+                    <span className="bubble-menu__label">{option.label}</span>
+                  </BubbleBtn>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
           <div className="bubble-menu__group">
             <CustomSelect
               size="sm"
@@ -236,6 +308,8 @@ function RichTextEditor({ value, onChange, onImageUpload }) {
               </svg>
             </BubbleBtn>
           </div>
+            </>
+          )}
         </BubbleMenu>
       )}
 

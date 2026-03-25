@@ -38,7 +38,6 @@ function StatCard({ label, value, description, tone = 'violet' }) {
         <span className="stat-card__count-label">{description}</span>
         <span className="stat-card__label">{label}</span>
       </div>
-      
     </article>
   );
 }

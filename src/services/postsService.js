@@ -2,6 +2,8 @@ import { POST_STATUS, ROLES } from '@/lib/constants';
 import { requireSupabase } from '@/lib/supabase';
 import { logAuditEvent } from './auditService';
 
+const CONTENT_TABLES = ['posts', 'blogs'];
+
 function applyPostScope(query, { role, userId, collegeId }) {
   let scopedQuery = query;
 
@@ -16,9 +18,47 @@ function applyPostScope(query, { role, userId, collegeId }) {
   return scopedQuery;
 }
 
+function getSourceTableForPostType(postType) {
+  return postType === 'blog' ? 'blogs' : 'posts';
+}
+
+function getEntityTypeForTable(sourceTable) {
+  return sourceTable === 'blogs' ? 'blog' : 'post';
+}
+
+async function fetchRecordById(client, sourceTable, postId) {
+  const { data, error } = await client
+    .from(sourceTable)
+    .select('*')
+    .eq('id', postId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+async function resolveSourceTable(client, postId, preferredSourceTable) {
+  if (preferredSourceTable) {
+    return preferredSourceTable;
+  }
+
+  for (const sourceTable of CONTENT_TABLES) {
+    const record = await fetchRecordById(client, sourceTable, postId);
+
+    if (record) {
+      return sourceTable;
+    }
+  }
+
+  throw new Error('Content not found.');
+}
+
 async function countPosts({ role, userId, collegeId, status }) {
   const client = requireSupabase();
-  let query = client.from('posts').select('id', { count: 'exact', head: true });
+  let query = client.from('post_overview').select('id', { count: 'exact', head: true });
   query = applyPostScope(query, { role, userId, collegeId });
 
   if (status) {
@@ -70,7 +110,7 @@ export async function getDashboardData({ role, userId, collegeId }) {
   };
 }
 
-export async function listPosts({ role, userId, collegeId, status, search, postType }) {
+export async function listPosts({ role, userId, collegeId, status, search, postType, sourceTable }) {
   const client = requireSupabase();
   let query = applyPostScope(
     client.from('post_overview').select('*').order('updated_at', { ascending: false }),
@@ -89,6 +129,10 @@ export async function listPosts({ role, userId, collegeId, status, search, postT
     query = query.eq('post_type', postType);
   }
 
+  if (sourceTable) {
+    query = query.eq('source_table', sourceTable);
+  }
+
   const { data, error } = await query;
 
   if (error) {
@@ -98,26 +142,36 @@ export async function listPosts({ role, userId, collegeId, status, search, postT
   return data || [];
 }
 
-export async function getPostById(postId) {
+export async function getPostById(postId, options = {}) {
   const client = requireSupabase();
-  const { data, error } = await client.from('posts').select('*').eq('id', postId).single();
+  const { sourceTable } = options;
+  const table = await resolveSourceTable(client, postId, sourceTable);
+  const data = await fetchRecordById(client, table, postId);
 
-  if (error) {
-    throw error;
+  if (!data) {
+    throw new Error('Content not found.');
   }
 
   return data;
 }
 
-export async function updatePostFeaturedImage({ postId, authorId, featuredImageUrl, featuredImageAssetId }) {
+export async function updatePostFeaturedImage({
+  postId,
+  authorId,
+  featuredImageUrl,
+  featuredImageAssetId,
+  sourceTable,
+}) {
   const client = requireSupabase();
+  const table = await resolveSourceTable(client, postId, sourceTable);
+  const entityType = getEntityTypeForTable(table);
   const patch = {
     featured_image_url: featuredImageUrl || null,
     featured_image_asset_id: featuredImageAssetId || null,
   };
 
   const { data, error } = await client
-    .from('posts')
+    .from(table)
     .update(patch)
     .eq('id', postId)
     .select('*')
@@ -129,8 +183,8 @@ export async function updatePostFeaturedImage({ postId, authorId, featuredImageU
 
   await logAuditEvent({
     actor_id: authorId,
-    action: 'post.featured_image_updated',
-    entity_type: 'post',
+    action: `${entityType}.featured_image_updated`,
+    entity_type: entityType,
     entity_id: postId,
     metadata: {
       featured_image_url: patch.featured_image_url,
@@ -143,6 +197,8 @@ export async function updatePostFeaturedImage({ postId, authorId, featuredImageU
 
 export async function saveDraft(payload) {
   const client = requireSupabase();
+  const sourceTable = getSourceTableForPostType(payload.post_type);
+  const entityType = getEntityTypeForTable(sourceTable);
   const record = {
     ...payload,
     status: POST_STATUS.DRAFT,
@@ -150,8 +206,8 @@ export async function saveDraft(payload) {
   };
 
   const query = payload.id
-    ? client.from('posts').update(record).eq('id', payload.id)
-    : client.from('posts').insert(record);
+    ? client.from(sourceTable).update(record).eq('id', payload.id)
+    : client.from(sourceTable).insert(record);
 
   const { data, error } = await query.select('*').single();
 
@@ -161,8 +217,8 @@ export async function saveDraft(payload) {
 
   await logAuditEvent({
     actor_id: payload.author_id,
-    action: payload.id ? 'post.updated' : 'post.created',
-    entity_type: 'post',
+    action: payload.id ? `${entityType}.updated` : `${entityType}.created`,
+    entity_type: entityType,
     entity_id: data.id,
     metadata: { status: data.status, college_id: data.college_id },
   });
@@ -172,6 +228,8 @@ export async function saveDraft(payload) {
 
 export async function submitPost(payload) {
   const client = requireSupabase();
+  const sourceTable = getSourceTableForPostType(payload.post_type);
+  const entityType = getEntityTypeForTable(sourceTable);
   const record = {
     ...payload,
     status: POST_STATUS.SUBMITTED,
@@ -179,8 +237,8 @@ export async function submitPost(payload) {
   };
 
   const query = payload.id
-    ? client.from('posts').update(record).eq('id', payload.id)
-    : client.from('posts').insert(record);
+    ? client.from(sourceTable).update(record).eq('id', payload.id)
+    : client.from(sourceTable).insert(record);
 
   const { data, error } = await query.select('*').single();
 
@@ -190,8 +248,8 @@ export async function submitPost(payload) {
 
   await logAuditEvent({
     actor_id: payload.author_id,
-    action: 'post.submitted',
-    entity_type: 'post',
+    action: `${entityType}.submitted`,
+    entity_type: entityType,
     entity_id: data.id,
     metadata: { status: data.status, college_id: data.college_id },
   });
@@ -199,7 +257,7 @@ export async function submitPost(payload) {
   return data;
 }
 
-export async function listReviewQueue({ collegeId, status, postType }) {
+export async function listReviewQueue({ collegeId, status, postType, sourceTable }) {
   const client = requireSupabase();
   let query = client
     .from('post_overview')
@@ -219,6 +277,10 @@ export async function listReviewQueue({ collegeId, status, postType }) {
     query = query.eq('post_type', postType);
   }
 
+  if (sourceTable) {
+    query = query.eq('source_table', sourceTable);
+  }
+
   const { data, error } = await query;
 
   if (error) {
@@ -228,8 +290,10 @@ export async function listReviewQueue({ collegeId, status, postType }) {
   return data || [];
 }
 
-export async function updateReviewStatus({ postId, reviewerId, status, reviewNotes }) {
+export async function updateReviewStatus({ postId, reviewerId, status, reviewNotes, sourceTable }) {
   const client = requireSupabase();
+  const table = await resolveSourceTable(client, postId, sourceTable);
+  const entityType = getEntityTypeForTable(table);
   const patch = {
     status,
     review_notes: reviewNotes || null,
@@ -242,7 +306,7 @@ export async function updateReviewStatus({ postId, reviewerId, status, reviewNot
   }
 
   const { data, error } = await client
-    .from('posts')
+    .from(table)
     .update(patch)
     .eq('id', postId)
     .select('*')
@@ -254,8 +318,8 @@ export async function updateReviewStatus({ postId, reviewerId, status, reviewNot
 
   await logAuditEvent({
     actor_id: reviewerId,
-    action: `post.${status}`,
-    entity_type: 'post',
+    action: `${entityType}.${status}`,
+    entity_type: entityType,
     entity_id: postId,
     metadata: { review_notes: reviewNotes || null },
   });
