@@ -6,8 +6,8 @@ import EmptyState from '@/components/common/EmptyState';
 import StatusBadge from '@/components/common/StatusBadge';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { useAuth } from '@/hooks/useAuth';
-import { POST_STATUS } from '@/lib/constants';
-import { formatDate, formatPostTypeLabel, getCollegeName } from '@/lib/utils';
+import { POST_STATUS, ROLES } from '@/lib/constants';
+import { formatDate, formatPostTypeLabel } from '@/lib/utils';
 import { getPostById, listPosts } from '@/services/postsService';
 
 const filterOptions = [
@@ -35,8 +35,9 @@ function SkeletonRow() {
 
 function PostListPage() {
   const location = useLocation();
-  const { profile, user, selectedCollegeName } = useAuth();
+  const { profile, user, colleges, selectedCollegeName, getCollegeNameById } = useAuth();
   const [status, setStatus] = useState('');
+  const [collegeFilter, setCollegeFilter] = useState('');
   const [search, setSearch] = useState('');
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +45,8 @@ function PostListPage() {
   const role = profile?.role;
   const collegeId = profile?.selected_college_id;
   const userId = user?.id;
+  const isAdminView = role === ROLES.ADMIN;
+  const scopedCollegeId = isAdminView ? collegeFilter : collegeId;
   const isBlogsView = location.pathname.startsWith('/blogs');
   const copy = useMemo(
     () => (isBlogsView
@@ -78,7 +81,7 @@ function PostListPage() {
       const previewData = {
         ...post,
         tags: post.tags || [],
-        collegeName: selectedCollegeName || getCollegeName(post.college_id),
+        collegeName: post.college_name || getCollegeNameById(post.college_id) || selectedCollegeName,
       };
       sessionStorage.setItem('cms-preview', JSON.stringify(previewData));
       window.open('/preview', '_blank');
@@ -93,10 +96,14 @@ function PostListPage() {
       try {
         setLoading(true);
         const data = await listPosts({
-          role, userId, collegeId, status,
+          role,
+          userId,
+          collegeId: scopedCollegeId,
+          status,
           search: deferredSearch,
           postType: isBlogsView ? 'blog' : undefined,
           sourceTable: isBlogsView ? 'blogs' : 'posts',
+          createdByStaffOnly: isAdminView,
         });
         setPosts(data);
       } catch (error) {
@@ -106,7 +113,7 @@ function PostListPage() {
       }
     };
     loadPosts();
-  }, [collegeId, deferredSearch, isBlogsView, role, status, userId]);
+  }, [deferredSearch, isAdminView, isBlogsView, role, scopedCollegeId, status, userId]);
 
   return (
     <div className="stack-lg">
@@ -140,6 +147,18 @@ function PostListPage() {
               placeholder={copy.searchPlaceholder}
             />
           </div>
+          {isAdminView && (
+            <CustomSelect
+              value={collegeFilter}
+              onChange={setCollegeFilter}
+              options={[
+                { value: '', label: 'All colleges' },
+                ...colleges.map((college) => ({ value: college.id, label: college.name })),
+              ]}
+              placeholder="All colleges"
+              className="post-list-panel__filter post-list-panel__filter--college"
+            />
+          )}
           <CustomSelect
             value={status}
             onChange={setStatus}
@@ -172,9 +191,14 @@ function PostListPage() {
                       <div className="post-table__title-cell">
                         <span className="post-table__title">{post.title}</span>
                         <span className="post-table__slug">{post.slug}</span>
+                        {post.status === POST_STATUS.REVISION && post.review_notes && (
+                          <span className="post-table__review-note">
+                            Revision note: {post.review_notes}
+                          </span>
+                        )}
                       </div>
                     </td>
-                    <td className="post-table__college">{getCollegeName(post.college_id)}</td>
+                    <td className="post-table__college">{post.college_name || getCollegeNameById(post.college_id)}</td>
                     <td>
                       <span className="post-type-chip">{formatPostTypeLabel(post.post_type)}</span>
                     </td>
@@ -191,9 +215,9 @@ function PostListPage() {
                       </button>
                       <Link
                         className="post-table__edit-btn"
-                        to={`${copy.editBasePath}/${post.id}/edit`}
+                        to={`${copy.editBasePath}/${post.id}/edit${isAdminView ? '?mode=view' : ''}`}
                       >
-                        Edit <FiArrowRight size={13} />
+                        {isAdminView ? 'Open' : 'Edit'} <FiArrowRight size={13} />
                       </Link>
                     </td>
                   </tr>

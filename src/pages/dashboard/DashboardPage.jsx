@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import StatCard from '@/components/common/StatCard';
 import { useAuth } from '@/hooks/useAuth';
 import { getDashboardData } from '@/services/postsService';
+import { POST_STATUS, ROLES } from '@/lib/constants';
 import { formatDate, formatPostTypeLabel } from '@/lib/utils';
 
 const STATUS_LABELS = {
@@ -66,7 +67,12 @@ function DashboardPage() {
   };
 
   const recentPosts = dashboard?.recentPosts || [];
-  const featuredPosts = recentPosts.slice(0, 3);
+  const reviewQueue = dashboard?.reviewQueue || [];
+  const isAdminDashboard = role === ROLES.ADMIN;
+  const dashboardItems = isAdminDashboard ? reviewQueue : recentPosts;
+  const adminSubmittedItems = reviewQueue.filter((post) => post.status === POST_STATUS.SUBMITTED);
+  const activityItems = isAdminDashboard ? adminSubmittedItems : dashboardItems.slice(0, 4);
+  const featuredRecentPosts = recentPosts.slice(0, 3);
 
   // Derive event analytics from recent posts
   const eventPosts = recentPosts.filter((p) => p.post_type === 'event');
@@ -119,7 +125,7 @@ function DashboardPage() {
   return (
     <div className="dashboard dashboard--two-col">
       {/* ── Left: Main content ── */}
-      <div className="dashboard__main">
+      <div className={`dashboard__main${isAdminDashboard ? ' dashboard__main--admin' : ''}`}>
         {/* Stat pills */}
         <section className="stats-grid">
           <StatCard
@@ -148,132 +154,129 @@ function DashboardPage() {
           />
         </section>
 
-        {/* Story cards section */}
-        <section className="dashboard-card">
-          <div className="dashboard-card__header">
-            <div>
-              <span className="dashboard-card__eyebrow">Recent content</span>
-              <h3>Latest stories in motion</h3>
-            </div>
-            <Link to="/posts" className="dashboard-card__header-action">
-              View Library
-            </Link>
-          </div>
-          <div className="story-grid">
-            {featuredPosts.length > 0 ? (
-              featuredPosts.map((post) => (
-                <div className="story-card" key={post.id}>
-                  {/* Thumbnail area */}
-                  <div className="story-card__thumb">
-                    <img
-                      className="story-card__thumb-image"
-                      src={post.featured_image_url || '/disabledimage.webp'}
-                      alt={post.title || 'Story thumbnail'}
-                    />
-                    <span className={`story-card__badge story-card__badge--${STATUS_CLASS_MAP[post.status] || 'draft'}`}>
-                      {STATUS_LABELS[post.status] || post.status}
-                    </span>
-                  </div>
-
-                  {/* Card body */}
-                  <div className="story-card__body">
-                    <div className="story-card__title-row">
-                      <h4>
-                        {post.title}
-                        <span className="story-card__type-tag">
-                          ({POST_TYPE_LABELS[post.post_type] || post.post_type})
-                        </span>
-                      </h4>
-                    </div>
-                    <p className="story-card__category">
-                      {post.category || 'Editorial'} &middot; {selectedCollegeName}
-                    </p>
-
-                    {/* Meta rows with icons */}
-                    <div className="story-card__meta-list">
-                      <div className="story-card__meta-row">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                          <line x1="16" y1="2" x2="16" y2="6" />
-                          <line x1="8" y1="2" x2="8" y2="6" />
-                          <line x1="3" y1="10" x2="21" y2="10" />
-                        </svg>
-                        <span>{formatDate(post.updated_at)}</span>
-                      </div>
-                      <div className="story-card__meta-row">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
-                          <circle cx="12" cy="10" r="3" />
-                        </svg>
-                        <span>{selectedCollegeName}</span>
-                      </div>
-                      <div className="story-card__meta-row">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                        <span>{POST_TYPE_LABELS[post.post_type] || post.post_type}</span>
-                      </div>
-                    </div>
-
-                    {/* Footer action */}
-                    <div className="story-card__footer">
-                      <span className="story-card__status-text">
-                        Status: <strong>{STATUS_LABELS[post.status] || post.status}</strong>
-                      </span>
-                      <Link
-                        to={`${post.post_type === 'blog' ? '/blogs' : '/posts'}/${post.id}/edit`}
-                        className="story-card__action"
-                      >
-                        Edit Post
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="dashboard-empty">
-                <div className="dashboard-empty__icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="12" y1="18" x2="12" y2="12" />
-                    <line x1="9" y1="15" x2="15" y2="15" />
-                  </svg>
-                </div>
-                <span className="dashboard-empty__eyebrow">Ready to publish</span>
-                <h4>No Post yet</h4>
-                <p>
-                  Start with a post, event update, or blog article for {selectedCollegeName}.
-                  Once your first story is drafted, this workspace will begin surfacing your pipeline here.
-                </p>
-                <div className="dashboard-empty__actions">
-                  <Link to="/posts/new" className="btn btn--dashed">
-                    Create New Post
-                  </Link>
-                </div>
+        {!isAdminDashboard && (
+          <section className="dashboard-card">
+            <div className="dashboard-card__header">
+              <div>
+                <span className="dashboard-card__eyebrow">Recent content</span>
+                <h3>Latest stories in motion</h3>
               </div>
-            )}
-          </div>
-        </section>
+              <Link to="/posts" className="dashboard-card__header-action">
+                View Library
+              </Link>
+            </div>
+            <div className="story-grid">
+              {featuredRecentPosts.length > 0 ? (
+                featuredRecentPosts.map((post) => (
+                  <div className="story-card" key={post.id}>
+                    <div className="story-card__thumb">
+                      <img
+                        className="story-card__thumb-image"
+                        src={post.featured_image_url || '/disabledimage.webp'}
+                        alt={post.title || 'Story thumbnail'}
+                      />
+                      <span className={`story-card__badge story-card__badge--${STATUS_CLASS_MAP[post.status] || 'draft'}`}>
+                        {STATUS_LABELS[post.status] || post.status}
+                      </span>
+                    </div>
+
+                    <div className="story-card__body">
+                      <div className="story-card__title-row">
+                        <h4>
+                          {post.title}
+                          <span className="story-card__type-tag">
+                            ({POST_TYPE_LABELS[post.post_type] || post.post_type})
+                          </span>
+                        </h4>
+                      </div>
+                      <p className="story-card__category">
+                        {post.category || 'Editorial'} &middot; {selectedCollegeName}
+                      </p>
+
+                      <div className="story-card__meta-list">
+                        <div className="story-card__meta-row">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                            <line x1="16" y1="2" x2="16" y2="6" />
+                            <line x1="8" y1="2" x2="8" y2="6" />
+                            <line x1="3" y1="10" x2="21" y2="10" />
+                          </svg>
+                          <span>{formatDate(post.updated_at)}</span>
+                        </div>
+                        <div className="story-card__meta-row">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                            <circle cx="12" cy="10" r="3" />
+                          </svg>
+                          <span>{selectedCollegeName}</span>
+                        </div>
+                        <div className="story-card__meta-row">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                          </svg>
+                          <span>{POST_TYPE_LABELS[post.post_type] || post.post_type}</span>
+                        </div>
+                      </div>
+
+                      <div className="story-card__footer">
+                        <span className="story-card__status-text">
+                          Status: <strong>{STATUS_LABELS[post.status] || post.status}</strong>
+                        </span>
+                        <Link
+                          to={`${post.post_type === 'blog' ? '/blogs' : '/posts'}/${post.id}/edit`}
+                          className="story-card__action"
+                        >
+                          Edit Post
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="dashboard-empty">
+                  <div className="dashboard-empty__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="12" y1="18" x2="12" y2="12" />
+                      <line x1="9" y1="15" x2="15" y2="15" />
+                    </svg>
+                  </div>
+                  <span className="dashboard-empty__eyebrow">Ready to publish</span>
+                  <h4>No Post yet</h4>
+                  <p>
+                    Start with a post, event update, or blog article for {selectedCollegeName}.
+                    Once your first story is drafted, this workspace will begin surfacing your pipeline here.
+                  </p>
+                  <div className="dashboard-empty__actions">
+                    <Link to="/posts/new" className="btn btn--dashed">
+                      Create New Post
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Activity feed table */}
         <section className="dashboard-card">
           <div className="dashboard-card__header">
             <div>
-              <span className="dashboard-card__eyebrow">Activity feed</span>
-              <h3>Recent editorial activity</h3>
+              <span className="dashboard-card__eyebrow">{isAdminDashboard ? 'Queue activity' : 'Activity feed'}</span>
+              <h3>{isAdminDashboard ? 'Latest review activity' : 'Recent editorial activity'}</h3>
             </div>
-            <Link to="/posts" className="dashboard-card__header-action">
-              View All
+            <Link to={isAdminDashboard ? '/review' : '/posts'} className="dashboard-card__header-action">
+              {isAdminDashboard ? 'Open Queue' : 'View All'}
             </Link>
           </div>
           <div className="team-list">
-            {recentPosts.length > 0 ? (
-              recentPosts.slice(0, 4).map((post, index) => {
+            {activityItems.length > 0 ? (
+              activityItems.map((post, index) => {
                 const colors = ['#2d3894', '#3b82f6', '#f59e0b', '#e11d48'];
-                return (
-                  <div className="team-list__item" key={post.id}>
+                const itemContent = (
+                  <>
                     <div
                       className="team-list__avatar"
                       style={{ background: colors[index % colors.length] }}
@@ -287,12 +290,30 @@ function DashboardPage() {
                     <span className={`team-list__status team-list__status--${STATUS_CLASS_MAP[post.status] || 'draft'}`}>
                       {STATUS_LABELS[post.status] || post.status}
                     </span>
+                  </>
+                );
+
+                if (isAdminDashboard) {
+                  return (
+                    <Link
+                      key={post.id}
+                      to={`/review?postId=${post.id}`}
+                      className="team-list__item"
+                    >
+                      {itemContent}
+                    </Link>
+                  );
+                }
+
+                return (
+                  <div className="team-list__item" key={post.id}>
+                    {itemContent}
                   </div>
                 );
               })
             ) : (
               <p className="muted" style={{ fontSize: '0.88rem' }}>
-                No recent activity to display.
+                {isAdminDashboard ? 'No submitted events or blogs to display.' : 'No recent activity to display.'}
               </p>
             )}
           </div>

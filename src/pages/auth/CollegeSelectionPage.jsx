@@ -1,16 +1,92 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { COLLEGES } from '@/lib/constants';
 import { useAuth } from '@/hooks/useAuth';
+
+const DEFAULT_COLLEGE_ID = 'smvec-engineering-college';
+
+// Dummy backgrounds for college selection. Replace these URLs with your real images later.
+const COLLEGE_BACKGROUND_IMAGES = {
+  'smvec-engineering-college': 'https://agri.smvec.ac.in/assets/img/breadcrumb/DJI_0981.jpg',
+  'smvsas-arts-and-science': 'https://arts.smvec.ac.in/assets/img/image/Sri_Manakula_Vinayagar_Engineering_College.webp',
+  'smvec-centre-of-legal-education': 'https://law.smvec.ac.in/assets/img/hero/hero-bg-2.jpg',
+  'smvec-school-of-agricultural-science': 'https://agri.smvec.ac.in/assets/img/hero/hero-11.webp',
+  'smvec-allied-health-science': 'https://mbbscouncilcdn.s3.amazonaws.com/wp-content/uploads/2020/03/Sri-Manakula-Vinayagar-Medical-College-and-Hospital-Pondicherry-Overall-Campus.jpg',
+  'smv-school': 'https://marksmendaily.com/wp-content/uploads/2023/04/24059_SMV-Ipl1PR.jpeg',
+  'takshashila-engineering-college': 'https://cache.careers360.mobi/media/colleges/social-media/media-gallery/63710/2026/3/10/Campus%20View%20of%20Takshashila%20Medical%20College%20Villupuram_Campus-View.jpg',
+  'takshashila-medical-college': 'https://cache.careers360.mobi/media/colleges/social-media/media-gallery/63710/2026/3/10/Campus%20View%20of%20Takshashila%20Medical%20College%20Villupuram_Campus-View.jpg',
+  'smvmch-college-and-hospital': 'https://smvmch.ac.in/images/AboutAS/about.jpg',
+  'mvit': 'https://upload.wikimedia.org/wikipedia/commons/4/4f/Mvitimage.jpg',
+  'mailam-engineering-college': 'https://mailamengg.ac.in/wp-content/uploads/2026/03/Mailam-College.png',
+};
+
+function getCollegeBackground(collegeId) {
+  if (!collegeId) {
+    return COLLEGE_BACKGROUND_IMAGES[DEFAULT_COLLEGE_ID];
+  }
+
+  return COLLEGE_BACKGROUND_IMAGES[collegeId]
+    || `https://picsum.photos/seed/${collegeId}/1920/1080`;
+}
 
 function CollegeSelectionPage() {
   const navigate = useNavigate();
-  const { profile, selectedCollegeId, selectCollege } = useAuth();
-  const [activeCollege, setActiveCollege] = useState(selectedCollegeId || '');
+  const { profile, selectedCollegeId, selectCollege, colleges } = useAuth();
+  const initialCollege = selectedCollegeId || DEFAULT_COLLEGE_ID;
+  const [activeCollege, setActiveCollege] = useState(initialCollege);
   const [submitting, setSubmitting] = useState(false);
+  const [backgroundTransition, setBackgroundTransition] = useState(() => ({
+    current: getCollegeBackground(initialCollege),
+    previous: null,
+    key: 0,
+  }));
 
-  if (profile?.role === 'staff' && selectedCollegeId) {
+  useEffect(() => {
+    const nextBackground = getCollegeBackground(activeCollege || DEFAULT_COLLEGE_ID);
+
+    setBackgroundTransition((previousState) => {
+      if (previousState.current === nextBackground) {
+        return previousState;
+      }
+
+      return {
+        current: nextBackground,
+        previous: previousState.current,
+        key: previousState.key + 1,
+      };
+    });
+  }, [activeCollege]);
+
+  useEffect(() => {
+    if (!backgroundTransition.previous) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setBackgroundTransition((previousState) => ({
+        ...previousState,
+        previous: null,
+      }));
+    }, 620);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [backgroundTransition.key, backgroundTransition.previous]);
+
+  useEffect(() => {
+    if (!colleges.length) {
+      return;
+    }
+
+    const hasActiveCollege = colleges.some((college) => college.id === activeCollege);
+    if (hasActiveCollege) {
+      return;
+    }
+
+    const defaultCollege = colleges.find((college) => college.id === DEFAULT_COLLEGE_ID);
+    setActiveCollege(defaultCollege?.id || colleges[0].id);
+  }, [activeCollege, colleges]);
+
+  if (profile?.role === 'admin' || (profile?.role === 'staff' && selectedCollegeId)) {
     return <Navigate to="/" replace />;
   }
 
@@ -34,19 +110,26 @@ function CollegeSelectionPage() {
 
   return (
     <div className="college-pick">
-      <div className="college-pick__container">
-        {/* Step indicator */}
-        <div className="college-pick__step">
-          <span className="college-pick__step-dot college-pick__step-dot--done" />
-          <span className="college-pick__step-line" />
-          <span className="college-pick__step-dot college-pick__step-dot--active" />
-          <span className="college-pick__step-line college-pick__step-line--pending" />
-          <span className="college-pick__step-dot" />
-        </div>
+      <div className="college-pick__bg-stage" aria-hidden="true">
+        {backgroundTransition.previous && (
+          <div
+            key={`bg-prev-${backgroundTransition.key}`}
+            className="college-pick__bg-layer is-exiting"
+            style={{ backgroundImage: `url(${backgroundTransition.previous})` }}
+          />
+        )}
+        <div
+          key={`bg-current-${backgroundTransition.key}`}
+          className={`college-pick__bg-layer ${backgroundTransition.previous ? 'is-entering' : 'is-active'}`}
+          style={{ backgroundImage: `url(${backgroundTransition.current})` }}
+        />
+      </div>
+      <div className='college-pick-overlay-bg'>
+        <div className="college-pick__container">
+      
 
         {/* Question */}
         <div className="college-pick__question">
-          <span className="college-pick__emoji">🏛️</span>
           <h1 className="college-pick__title">Which college do you belong to?</h1>
           <p className="college-pick__desc">
             Your dashboard, posts, and permissions will be scoped to this college.
@@ -55,7 +138,7 @@ function CollegeSelectionPage() {
 
         {/* College options */}
         <div className="college-pick__grid">
-          {COLLEGES.map((college) => (
+          {colleges.map((college) => (
             <button
               key={college.id}
               type="button"
@@ -103,6 +186,7 @@ function CollegeSelectionPage() {
             )}
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

@@ -57,13 +57,13 @@ function PreviewPage() {
   const heroImage = post?.featured_image_url || fallbackImage;
   const eventDateLabel = post?.event_date ? formatDate(post.event_date, 'dd/MM/yyyy') : 'Date TBD';
   const eventTimeLabel = post?.event_time || 'Time TBD';
+  const eventLocationLabel = post?.location || 'Location TBD';
   const eventVenueLabel = post?.venue || 'Venue TBD';
-  const eventOrganizerLabel = post?.organizer || 'Organizer TBD';
 
   const handleShare = async () => {
     const sharePayload = {
       title: post?.title || 'Preview',
-      text: post?.summary || 'Check this preview.',
+      text: post?.title || 'Check this preview.',
       url: window.location.href,
     };
 
@@ -123,24 +123,14 @@ function PreviewPage() {
               </div>
 
               <h1 className="pv-event-hero__title">{post.title || 'Untitled event'}</h1>
-
-              {post.summary && (
-                <p className="pv-event-hero__summary">{post.summary}</p>
-              )}
             </div>
           </div>
         </section>
 
         <div className="pv-event-stage">
           <article className="pv-event-article">
-            <h2 className="pv-event-article__title">{post.title || 'Untitled event'}</h2>
 
-            <p className="pv-event-article__lede">
-              <strong>{post.collegeName || 'College'}</strong>
-              {post.summary
-                ? ` ${post.summary}`
-                : ' Review the event details, article body, and metadata before publishing.'}
-            </p>
+
 
             {safeTags.length > 0 && (
               <div className="pv-tags">
@@ -151,7 +141,10 @@ function PreviewPage() {
                 ))}
               </div>
             )}
-
+            <p className="pv-event-article__lede">
+              <strong>{post.collegeName || 'College'}</strong>
+              {' Review the event details, article body, and metadata before publishing.'}
+            </p>
             <div
               className="tiptap-content pv-body__content"
               dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
@@ -161,7 +154,7 @@ function PreviewPage() {
               <section className="pv-seo">
                 <span className="pv-seo__label">SEO Preview</span>
                 <h3>{post.seo_title || post.title || 'SEO title'}</h3>
-                <p>{post.seo_description || post.summary || 'SEO description'}</p>
+                <p>{post.seo_description || 'SEO description'}</p>
               </section>
             )}
           </article>
@@ -203,18 +196,19 @@ function PreviewPage() {
                     </svg>
                     <span>Location</span>
                   </div>
-                  <strong>{eventVenueLabel}</strong>
+                  <strong>{eventLocationLabel}</strong>
                 </div>
 
                 <div className="pv-event-card__row">
                   <div className="pv-event-card__row-label">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                      <circle cx="12" cy="7" r="4" />
+                      <path d="M3 7.5h18" />
+                      <path d="M5 7.5V18a2 2 0 002 2h10a2 2 0 002-2V7.5" />
+                      <path d="M8 7.5V5.5A1.5 1.5 0 019.5 4h5A1.5 1.5 0 0116 5.5v2" />
                     </svg>
-                    <span>Organizer</span>
+                    <span>Venue</span>
                   </div>
-                  <strong>{eventOrganizerLabel}</strong>
+                  <strong>{eventVenueLabel}</strong>
                 </div>
               </div>
 
@@ -250,11 +244,7 @@ function PreviewPage() {
               </div>
             </section>
 
-            <div className="pv-event-meta">
-              <span>{post.collegeName || 'College not set'}</span>
-              <span>{readingTime}</span>
-              <span>{statusLabel}</span>
-            </div>
+
           </aside>
         </div>
       </div>
@@ -294,10 +284,6 @@ function PreviewPage() {
             <h2 className="pv-hero__title">
               {post.title || (isEventPreview ? 'Untitled event' : 'Untitled article')}
             </h2>
-
-            <p className="pv-hero__summary">
-              {post.summary || 'A concise summary will appear here once one is added in the editor.'}
-            </p>
 
             <div className="pv-hero__stats">
               <div className="pv-stat">
@@ -343,7 +329,7 @@ function PreviewPage() {
               <section className="pv-seo">
                 <span className="pv-seo__label">SEO Preview</span>
                 <h3>{post.seo_title || post.title || 'SEO title'}</h3>
-                <p>{post.seo_description || post.summary || 'SEO description'}</p>
+                <p>{post.seo_description || 'SEO description'}</p>
               </section>
             )}
           </article>
@@ -384,12 +370,12 @@ function PreviewPage() {
                     <strong>{post.event_time || 'Time TBD'}</strong>
                   </div>
                   <div className="pv-detail">
-                    <span>Venue</span>
-                    <strong>{post.venue || 'Venue TBD'}</strong>
+                    <span>Location</span>
+                    <strong>{post.location || 'Location TBD'}</strong>
                   </div>
                   <div className="pv-detail">
-                    <span>Organizer</span>
-                    <strong>{post.organizer || 'Organizer TBD'}</strong>
+                    <span>Venue</span>
+                    <strong>{post.venue || 'Venue TBD'}</strong>
                   </div>
                 </div>
               </section>

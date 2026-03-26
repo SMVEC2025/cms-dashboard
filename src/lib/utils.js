@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { COLLEGES, POST_STATUS } from './constants';
+import { POST_STATUS } from './constants';
 
 export function slugify(value = '') {
   return value
@@ -31,8 +31,12 @@ export function formatDateTime(date, time) {
   return time ? `${dateLabel} at ${time}` : dateLabel;
 }
 
-export function getCollegeName(collegeId) {
-  return COLLEGES.find((college) => college.id === collegeId)?.name || 'College not selected';
+export function getCollegeName(collegeId, colleges = []) {
+  if (!collegeId) {
+    return 'College not selected';
+  }
+
+  return colleges.find((college) => college.id === collegeId)?.name || 'College not selected';
 }
 
 export function formatStatusLabel(status) {

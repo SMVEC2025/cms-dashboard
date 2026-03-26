@@ -1,22 +1,5 @@
 export const APP_NAME = import.meta.env.VITE_APP_NAME || 'SMVEC CMS';
 
-export const COLLEGES = [
-  { id: 'smvec-engineering-college', name: 'SMVEC Engineering college' },
-  { id: 'smvsas-arts-and-science', name: 'SMVSAS Arts and Science' },
-  { id: 'smvec-centre-of-legal-education', name: 'SMVEC Centre of legal education' },
-  { id: 'smvec-school-of-agricultural-science', name: 'SMVEC school of agricultural science' },
-  { id: 'smvec-allied-health-science', name: 'SMVEC Allied Health Science' },
-  { id: 'smv-school', name: 'SMV School' },
-  { id: 'takshashila-university', name: 'Takshashila University' },
-  { id: 'takshashila-engineering-college', name: 'Takshashila Engineering college' },
-  { id: 'takshashila-medical-college', name: 'Takshashila Medical college' },
-  { id: 'smvec', name: 'SMVEC' },
-  { id: 'smvmch-college-and-hospital', name: 'SMVMCH College and hospital' },
-  { id: 'mvit', name: 'MVIT' },
-  { id: 'smv-super-speciality-hospital', name: 'SMV Super speciality hospital' },
-  { id: 'mailam-engineering-college', name: 'Mailam engineering college' },
-];
-
 export const ROLES = {
   STAFF: 'staff',
   ADMIN: 'admin',
@@ -55,6 +38,7 @@ export const CATEGORY_OPTIONS = [
 export const NAV_ITEMS = {
   staff: [
     { to: '/', label: 'Dashboard', icon: 'dashboard' },
+    { to: '/drafts', label: 'Drafts', icon: 'drafts' },
     { to: '/posts', label: 'Posts', icon: 'content' },
     { to: '/posts/new', label: 'New Post', icon: 'create' },
     { to: '/blogs', label: 'Blogs', icon: 'blog' },
@@ -64,6 +48,7 @@ export const NAV_ITEMS = {
   ],
   admin: [
     { to: '/', label: 'Dashboard', icon: 'dashboard' },
+    { to: '/drafts', label: 'Drafts', icon: 'drafts' },
     { to: '/posts', label: 'Posts', icon: 'content' },
     { to: '/posts/new', label: 'New Post', icon: 'create' },
     { to: '/blogs', label: 'Blogs', icon: 'blog' },

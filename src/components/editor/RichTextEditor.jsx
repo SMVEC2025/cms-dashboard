@@ -47,7 +47,7 @@ function BubbleBtn({ active, onClick, children, title }) {
   );
 }
 
-function RichTextEditor({ value, onChange, onImageUpload }) {
+function RichTextEditor({ value, onChange, onImageUpload, readOnly = false }) {
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
 
   const editor = useEditor({
@@ -71,6 +71,7 @@ function RichTextEditor({ value, onChange, onImageUpload }) {
     editorProps: {
       attributes: { class: 'editor-surface__content' },
     },
+    editable: !readOnly,
     onUpdate: ({ editor: e }) => {
       onChange({ html: e.getHTML(), json: e.getJSON() });
     },
@@ -83,6 +84,11 @@ function RichTextEditor({ value, onChange, onImageUpload }) {
     if (currentHtml === nextValue || (nextValue === '' && currentHtml === '<p></p>')) return;
     editor.commands.setContent(nextValue, true);
   }, [editor, value]);
+
+  useEffect(() => {
+    if (!editor) return;
+    editor.setEditable(!readOnly);
+  }, [editor, readOnly]);
 
   const handleInsertImage = (asset) => {
     if (!asset || !editor) return;
@@ -118,18 +124,22 @@ function RichTextEditor({ value, onChange, onImageUpload }) {
 
   return (
     <div className="editor-surface">
-      <EditorToolbar
-        editor={editor}
-        onImageSelect={() => setIsImagePickerOpen(true)}
-      />
-      <EditorImagePicker
-        open={isImagePickerOpen}
-        onClose={() => setIsImagePickerOpen(false)}
-        onInsert={handleInsertImage}
-        onUpload={onImageUpload}
-      />
+      {!readOnly && (
+        <>
+          <EditorToolbar
+            editor={editor}
+            onImageSelect={() => setIsImagePickerOpen(true)}
+          />
+          <EditorImagePicker
+            open={isImagePickerOpen}
+            onClose={() => setIsImagePickerOpen(false)}
+            onInsert={handleInsertImage}
+            onUpload={onImageUpload}
+          />
+        </>
+      )}
 
-      {editor && (
+      {editor && !readOnly && (
         <BubbleMenu
           editor={editor}
           tippyOptions={{ duration: 100 }}

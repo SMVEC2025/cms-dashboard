@@ -1,7 +1,6 @@
 import { requireSupabase } from '@/lib/supabase';
 
 const mediaFunctionName = import.meta.env.VITE_SUPABASE_MEDIA_FUNCTION || 'r2-upload';
-const mediaUploadUrl = import.meta.env.VITE_MEDIA_UPLOAD_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const IMAGE_MIME_PREFIX = 'image/';
 const IMAGE_MAX_DIMENSION = 1920;
@@ -221,29 +220,17 @@ export async function uploadMedia({ file, folder = 'posts', folderId = null }) {
     ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
   };
 
-  if (isAbsoluteUrl(mediaUploadUrl)) {
-    try {
-      const payload = await uploadToAbsoluteUrl(mediaUploadUrl, formData, authHeaders);
-      return ensureMediaAssetMetadata({
-        client,
-        session,
-        payload,
-        folder,
-        file: uploadFile,
-        folderId,
-      });
-    } catch (error) {
-      if (error instanceof TypeError) {
-        throw new Error(`Local upload server is unreachable at ${mediaUploadUrl}. Start the local backend and try again.`);
-      }
-
-      throw error;
-    }
-  }
-
   if (isAbsoluteUrl(mediaFunctionName)) {
-    return uploadToAbsoluteUrl(mediaFunctionName, formData, {
+    const payload = await uploadToAbsoluteUrl(mediaFunctionName, formData, {
       ...authHeaders,
+    });
+    return ensureMediaAssetMetadata({
+      client,
+      session,
+      payload,
+      folder,
+      file: uploadFile,
+      folderId,
     });
   }
 

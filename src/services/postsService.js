@@ -26,6 +26,17 @@ function getEntityTypeForTable(sourceTable) {
   return sourceTable === 'blogs' ? 'blog' : 'post';
 }
 
+function normalizeContentPayload(payload) {
+  const persistedPayload = { ...payload };
+  delete persistedPayload.direct_publish;
+
+  return {
+    ...persistedPayload,
+    // Older schemas still require summary, even though the editor no longer exposes it.
+    summary: persistedPayload.summary ?? '',
+  };
+}
+
 async function fetchRecordById(client, sourceTable, postId) {
   const { data, error } = await client
     .from(sourceTable)
@@ -80,6 +91,16 @@ export async function getDashboardData({ role, userId, collegeId }) {
     client.from('post_overview').select('*').order('updated_at', { ascending: false }).limit(6),
     { role, userId, collegeId },
   );
+  let reviewQueueQuery = null;
+
+  if (role === ROLES.ADMIN) {
+    reviewQueueQuery = client
+      .from('post_overview')
+      .select('*')
+      .eq('status', POST_STATUS.SUBMITTED)
+      .in('post_type', ['event', 'blog'])
+      .order('submitted_at', { ascending: false, nullsFirst: false });
+  }
 
   const [
     totalPosts,
@@ -87,16 +108,22 @@ export async function getDashboardData({ role, userId, collegeId }) {
     pendingPosts,
     publishedPosts,
     { data: recentPosts, error: recentError },
+    reviewQueueResult,
   ] = await Promise.all([
     countPosts({ role, userId, collegeId }),
     countPosts({ role, userId, collegeId, status: POST_STATUS.DRAFT }),
     countPosts({ role, userId, collegeId, status: POST_STATUS.SUBMITTED }),
     countPosts({ role, userId, collegeId, status: POST_STATUS.PUBLISHED }),
     recentQuery,
+    reviewQueueQuery ?? Promise.resolve({ data: [], error: null }),
   ]);
 
   if (recentError) {
     throw recentError;
+  }
+
+  if (reviewQueueResult?.error) {
+    throw reviewQueueResult.error;
   }
 
   return {
@@ -107,15 +134,43 @@ export async function getDashboardData({ role, userId, collegeId }) {
       publishedPosts,
     },
     recentPosts: recentPosts || [],
+    reviewQueue: reviewQueueResult?.data || [],
   };
 }
 
-export async function listPosts({ role, userId, collegeId, status, search, postType, sourceTable }) {
+export async function listPosts({
+  role,
+  userId,
+  collegeId,
+  status,
+  search,
+  postType,
+  sourceTable,
+  createdByStaffOnly = false,
+}) {
   const client = requireSupabase();
   let query = applyPostScope(
     client.from('post_overview').select('*').order('updated_at', { ascending: false }),
     { role, userId, collegeId },
   );
+
+  if (createdByStaffOnly && role === ROLES.ADMIN) {
+    const { data: staffProfiles, error: staffError } = await client
+      .from('profiles')
+      .select('id')
+      .eq('role', ROLES.STAFF);
+
+    if (staffError) {
+      throw staffError;
+    }
+
+    const staffIds = (staffProfiles || []).map((profile) => profile.id);
+    if (!staffIds.length) {
+      return [];
+    }
+
+    query = query.in('author_id', staffIds);
+  }
 
   if (status) {
     query = query.eq('status', status);
@@ -152,7 +207,18 @@ export async function getPostById(postId, options = {}) {
     throw new Error('Content not found.');
   }
 
-  return data;
+  const { data: overview } = await client
+    .from('post_overview')
+    .select('author_name, college_name, source_table')
+    .eq('id', postId)
+    .eq('source_table', table)
+    .maybeSingle();
+
+  return {
+    ...data,
+    author_name: overview?.author_name || data.author_name || null,
+    college_name: overview?.college_name || null,
+  };
 }
 
 export async function updatePostFeaturedImage({
@@ -200,7 +266,7 @@ export async function saveDraft(payload) {
   const sourceTable = getSourceTableForPostType(payload.post_type);
   const entityType = getEntityTypeForTable(sourceTable);
   const record = {
-    ...payload,
+    ...normalizeContentPayload(payload),
     status: POST_STATUS.DRAFT,
     submitted_at: null,
   };
@@ -230,11 +296,22 @@ export async function submitPost(payload) {
   const client = requireSupabase();
   const sourceTable = getSourceTableForPostType(payload.post_type);
   const entityType = getEntityTypeForTable(sourceTable);
-  const record = {
-    ...payload,
-    status: POST_STATUS.SUBMITTED,
-    submitted_at: new Date().toISOString(),
-  };
+  const now = new Date().toISOString();
+  const shouldPublishDirectly = Boolean(payload.direct_publish);
+  const record = shouldPublishDirectly
+    ? {
+        ...normalizeContentPayload(payload),
+        status: POST_STATUS.PUBLISHED,
+        published_at: now,
+        reviewer_id: payload.author_id,
+        reviewed_at: now,
+      }
+    : {
+        ...normalizeContentPayload(payload),
+        status: POST_STATUS.SUBMITTED,
+        submitted_at: now,
+        published_at: null,
+      };
 
   const query = payload.id
     ? client.from(sourceTable).update(record).eq('id', payload.id)
@@ -248,7 +325,7 @@ export async function submitPost(payload) {
 
   await logAuditEvent({
     actor_id: payload.author_id,
-    action: `${entityType}.submitted`,
+    action: shouldPublishDirectly ? `${entityType}.published` : `${entityType}.submitted`,
     entity_type: entityType,
     entity_id: data.id,
     metadata: { status: data.status, college_id: data.college_id },

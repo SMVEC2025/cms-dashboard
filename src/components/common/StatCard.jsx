@@ -27,7 +27,7 @@ const TONE_ICONS = {
   ),
 };
 
-function StatCard({ label, value, description, tone = 'violet' }) {
+function StatCard({ label, value, tone = 'violet' }) {
   return (
     <article className={clsx('stat-card', `stat-card--${tone}`, Number(value) === 0 && 'stat-card--empty')}>
       <div className="stat-card__icon">
@@ -35,8 +35,7 @@ function StatCard({ label, value, description, tone = 'violet' }) {
       </div>
       <div className="stat-card__text">
         <span className="stat-card__count">{value}</span>
-        <span className="stat-card__count-label">{description}</span>
-        <span className="stat-card__label">{label}</span>
+        <span className="stat-card__count-label">{label}</span>
       </div>
     </article>
   );

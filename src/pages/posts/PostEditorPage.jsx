@@ -8,7 +8,7 @@ import EditorImagePicker from '@/components/editor/EditorImagePicker';
 import RichTextEditor from '@/components/editor/RichTextEditor';
 import StatusBadge from '@/components/common/StatusBadge';
 import { useAuth } from '@/hooks/useAuth';
-import { CATEGORY_OPTIONS, POST_TYPES } from '@/lib/constants';
+import { CATEGORY_OPTIONS, POST_STATUS, POST_TYPES, ROLES } from '@/lib/constants';
 import { formatPostTypeLabel, parseTagInput, slugify, tagsToInput } from '@/lib/utils';
 import { uploadMedia } from '@/services/mediaService';
 import {
@@ -23,12 +23,11 @@ const defaultValues = {
   post_type: 'event',
   title: '',
   slug: '',
-  summary: '',
   featured_image_url: '',
   event_date: '',
   event_time: '',
+  location: '',
   venue: '',
-  organizer: '',
   category: 'Announcement',
   tags: '',
   seo_title: '',
@@ -39,6 +38,37 @@ const TABS = [
   { id: 'content', label: 'Content' },
   { id: 'meta', label: 'Meta' },
 ];
+const CUSTOM_CATEGORY_VALUE = '__custom_category__';
+
+function countWords(value) {
+  return value.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function limitToWordCount(value, maxWords) {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) {
+    return value;
+  }
+
+  return words.slice(0, maxWords).join(' ');
+}
+
+function buildSnapshot(fields, contentHtml) {
+  return JSON.stringify({
+    title: fields.title || '',
+    slug: fields.slug || '',
+    featured_image_url: fields.featured_image_url || '',
+    event_date: fields.event_date || '',
+    event_time: fields.event_time || '',
+    location: fields.location || '',
+    venue: fields.venue || '',
+    category: fields.category || '',
+    tags: fields.tags || '',
+    seo_title: fields.seo_title || '',
+    seo_description: fields.seo_description || '',
+    content: contentHtml || '',
+  });
+}
 
 function PostEditorPage() {
   const location = useLocation();
@@ -47,13 +77,14 @@ function PostEditorPage() {
   const { profile, user, selectedCollegeName } = useAuth();
   const isBlogRoute = location.pathname.startsWith('/blogs');
   const isNewPostRoute = !postId && !isBlogRoute;
+  const isAdmin = profile?.role === ROLES.ADMIN;
   const sourceTable = isBlogRoute ? 'blogs' : 'posts';
   const importInputRef = useRef(null);
   const previewHandlerRef = useRef(null);
   const persistHandlerRef = useRef(null);
   const [manualSlug, setManualSlug] = useState(Boolean(postId));
   const [loading, setLoading] = useState(Boolean(postId));
-  const [saving, setSaving] = useState(false);
+  const [savingMode, setSavingMode] = useState(null);
   const [activeTab, setActiveTab] = useState('content');
   const [featuredUploading, setFeaturedUploading] = useState(false);
   const [featuredPickerOpen, setFeaturedPickerOpen] = useState(false);
@@ -61,6 +92,10 @@ function PostEditorPage() {
   const [featuredAsset, setFeaturedAsset] = useState(null);
   const [existingPost, setExistingPost] = useState(null);
   const [contentState, setContentState] = useState({ html: '', json: null });
+  const [isCustomCategorySelected, setIsCustomCategorySelected] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [isReadOnlyMode, setIsReadOnlyMode] = useState(false);
+  const submittedSnapshotRef = useRef(null);
 
   const {
     register,
@@ -77,14 +112,48 @@ function PostEditorPage() {
   });
 
   const slugField = register('slug', { required: 'Slug is required.' });
+  const descriptionField = register('seo_description', {
+    validate: (value) => {
+      const wordCount = countWords(value || '');
+
+      if (wordCount < 10) {
+        return 'Description must be at least 10 words.';
+      }
+
+      if (wordCount > 100) {
+        return 'Description cannot exceed 100 words.';
+      }
+
+      return true;
+    },
+  });
   const eventDateField = register('event_date');
   const watchedValues = watch();
   const selectedPostType = watchedValues.post_type || defaultValues.post_type;
+  const selectedCategory = watchedValues.category || '';
   const isEventPost = selectedPostType === 'event';
   const isBlogPost = selectedPostType === 'blog';
+  const hasPresetCategory = CATEGORY_OPTIONS.includes(selectedCategory);
+  const showCustomCategoryInput = isCustomCategorySelected || Boolean(selectedCategory && !hasPresetCategory);
   const editorPostTypeOptions = isBlogRoute
     ? POST_TYPES.filter((option) => option.value === 'blog')
     : POST_TYPES.filter((option) => option.value !== 'blog');
+  const categoryOptions = [
+    ...CATEGORY_OPTIONS.map((opt) => ({ value: opt, label: opt })),
+    { value: CUSTOM_CATEGORY_VALUE, label: 'Other' },
+  ];
+  const isSaving = savingMode !== null;
+  const currentUserName = profile?.full_name || user?.email?.split('@')[0] || 'Unknown';
+  const authorDisplayName = existingPost
+    ? existingPost.author_name
+      || (existingPost.author_id === user?.id ? currentUserName : 'Staff')
+    : currentUserName;
+  const collegeDisplayName = existingPost?.college_name || selectedCollegeName;
+
+  const navigateToEditor = (savedPost) => {
+    const editBase = savedPost.post_type === 'blog' ? '/blogs' : '/posts';
+    navigate(`${editBase}/${savedPost.id}/edit`, { replace: true });
+  };
 
   const handleEventDateChange = (nextValue) => {
     setValue('event_date', nextValue, {
@@ -92,6 +161,26 @@ function PostEditorPage() {
       shouldTouch: true,
     });
   };
+
+  const handleDescriptionChange = (event) => {
+    const limitedValue = limitToWordCount(event.target.value, 100);
+
+    if (limitedValue !== event.target.value) {
+      event.target.value = limitedValue;
+    }
+
+    descriptionField.onChange(event);
+  };
+
+  useEffect(() => {
+    if (!postId) {
+      setIsReadOnlyMode(false);
+      return;
+    }
+
+    const viewModeRequested = isAdmin && new URLSearchParams(location.search).get('mode') === 'view';
+    setIsReadOnlyMode(viewModeRequested);
+  }, [isAdmin, location.search, postId]);
 
   useEffect(() => {
     if (!postId) return;
@@ -103,12 +192,11 @@ function PostEditorPage() {
         setValue('post_type', post.post_type);
         setValue('title', post.title);
         setValue('slug', post.slug);
-        setValue('summary', post.summary);
         setValue('featured_image_url', post.featured_image_url || '');
         setValue('event_date', post.event_date || '');
         setValue('event_time', post.event_time || '');
+        setValue('location', post.location || '');
         setValue('venue', post.venue || '');
-        setValue('organizer', post.organizer || '');
         setValue('category', post.category || 'Announcement');
         setValue('tags', tagsToInput(post.tags));
         setValue('seo_title', post.seo_title || '');
@@ -118,6 +206,22 @@ function PostEditorPage() {
           json: post.content_json || null,
         });
         setManualSlug(true);
+        if (post.status === POST_STATUS.SUBMITTED) {
+          setIsLocked(true);
+          submittedSnapshotRef.current = buildSnapshot({
+            title: post.title,
+            slug: post.slug,
+            featured_image_url: post.featured_image_url || '',
+            event_date: post.event_date || '',
+            event_time: post.event_time || '',
+            location: post.location || '',
+            venue: post.venue || '',
+            category: post.category || 'Announcement',
+            tags: tagsToInput(post.tags),
+            seo_title: post.seo_title || '',
+            seo_description: post.seo_description || '',
+          }, post.content_html || '');
+        }
       } catch (error) {
         toast.error(error.message);
       } finally {
@@ -139,8 +243,8 @@ function PostEditorPage() {
 
     setValue('event_date', '');
     setValue('event_time', '');
+    setValue('location', '');
     setValue('venue', '');
-    setValue('organizer', '');
   }, [isEventPost, setValue]);
 
   useEffect(() => {
@@ -150,10 +254,25 @@ function PostEditorPage() {
 
     setValue('post_type', 'blog');
 
-    if (!watch('category')) {
+    if (!selectedCategory && !isCustomCategorySelected) {
       setValue('category', 'Blog');
     }
-  }, [isBlogRoute, setValue, watch]);
+  }, [isBlogRoute, isCustomCategorySelected, selectedCategory, setValue]);
+
+  useEffect(() => {
+    if (selectedCategory && !CATEGORY_OPTIONS.includes(selectedCategory)) {
+      setIsCustomCategorySelected(true);
+    }
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    if (!isLocked || !submittedSnapshotRef.current) return;
+    const current = buildSnapshot(watchedValues, contentState.html);
+    if (current !== submittedSnapshotRef.current) {
+      setIsLocked(false);
+      submittedSnapshotRef.current = null;
+    }
+  }, [watchedValues, contentState, isLocked]);
 
   const uploadFeaturedAsset = async (file) => {
     if (!file) return;
@@ -172,14 +291,18 @@ function PostEditorPage() {
     setValue('featured_image_url', asset.publicUrl, { shouldDirty: true });
 
     if (existingPost?.id) {
-        const updatedPost = await updatePostFeaturedImage({
-          postId: existingPost.id,
-          authorId: existingPost.author_id || user.id,
-          featuredImageUrl: asset.publicUrl,
-          featuredImageAssetId: asset.id,
-          sourceTable,
-        });
-      setExistingPost(updatedPost);
+      const updatedPost = await updatePostFeaturedImage({
+        postId: existingPost.id,
+        authorId: user.id,
+        featuredImageUrl: asset.publicUrl,
+        featuredImageAssetId: asset.id,
+        sourceTable,
+      });
+      setExistingPost((previousPost) => ({
+        ...updatedPost,
+        author_name: previousPost?.author_name || updatedPost.author_name || null,
+        college_name: previousPost?.college_name || updatedPost.college_name || null,
+      }));
     }
 
     if (successMessage) {
@@ -203,12 +326,16 @@ function PostEditorPage() {
       if (existingPost?.id) {
         const updatedPost = await updatePostFeaturedImage({
           postId: existingPost.id,
-          authorId: existingPost.author_id || user.id,
+          authorId: user.id,
           featuredImageUrl: null,
           featuredImageAssetId: null,
           sourceTable,
         });
-        setExistingPost(updatedPost);
+        setExistingPost((previousPost) => ({
+          ...updatedPost,
+          author_name: previousPost?.author_name || updatedPost.author_name || null,
+          college_name: previousPost?.college_name || updatedPost.college_name || null,
+        }));
       }
 
       toast.success('Featured image removed.');
@@ -244,6 +371,12 @@ function PostEditorPage() {
   };
 
   const handleImportContent = async (event) => {
+    if (isReadOnlyMode) {
+      event.target.value = '';
+      toast.error('Click Edit to import content.');
+      return;
+    }
+
     const file = event.target.files?.[0];
     if (!file) {
       return;
@@ -289,19 +422,27 @@ function PostEditorPage() {
   };
 
   const persistPost = async (mode) => {
+    if (isReadOnlyMode) {
+      toast.error('Click Edit to make changes.');
+      return;
+    }
+
     const values = watch();
     if (!contentState.html) {
       toast.error('Add the main content before saving.');
       return;
     }
+
+    const shouldAssignAdminAsAuthor = Boolean(postId && isAdmin && existingPost?.id);
+    const shouldDirectPublish = Boolean(mode === 'submit' && isAdmin);
+
     const payload = {
       id: postId,
-      author_id: existingPost?.author_id || user.id,
-      college_id: profile.selected_college_id,
+      author_id: shouldAssignAdminAsAuthor ? user.id : (existingPost?.author_id || user.id),
+      college_id: existingPost?.college_id || profile.selected_college_id,
       post_type: values.post_type,
       title: values.title,
       slug: values.slug,
-      summary: values.summary,
       featured_image_url: values.featured_image_url || null,
       featured_image_asset_id:
         featuredAsset?.id || existingPost?.featured_image_asset_id || null,
@@ -309,34 +450,52 @@ function PostEditorPage() {
       content_json: contentState.json,
       event_date: isEventPost ? values.event_date || null : null,
       event_time: isEventPost ? values.event_time || null : null,
+      location: isEventPost ? values.location || null : null,
       venue: isEventPost ? values.venue || null : null,
-      organizer: isEventPost ? values.organizer || null : null,
       category: values.category || null,
       tags: parseTagInput(values.tags),
       seo_title: values.seo_title || null,
       seo_description: values.seo_description || null,
+      direct_publish: shouldDirectPublish,
     };
     try {
-      setSaving(true);
+      setSavingMode(mode);
       const savedPost =
         mode === 'submit'
           ? await submitPost(payload)
           : await saveDraft(payload);
-      setExistingPost(savedPost);
+      setExistingPost((previousPost) => ({
+        ...savedPost,
+        author_name:
+          savedPost.author_id === user.id
+            ? currentUserName
+            : previousPost?.author_name || savedPost.author_name || null,
+        college_name: previousPost?.college_name || savedPost.college_name || null,
+      }));
       const contentLabel = formatPostTypeLabel(savedPost.post_type || values.post_type);
       toast.success(
         mode === 'submit'
-          ? `${contentLabel} submitted for admin approval.`
+          ? (shouldDirectPublish
+              ? `${contentLabel} published successfully.`
+              : `${contentLabel} submitted for admin approval.`)
           : `${contentLabel} draft saved.`,
       );
+      if (mode === 'submit') {
+        if (shouldDirectPublish) {
+          setIsLocked(false);
+          submittedSnapshotRef.current = null;
+        } else {
+          setIsLocked(true);
+          submittedSnapshotRef.current = buildSnapshot(values, contentState.html);
+        }
+      }
       if (!postId) {
-        const editBase = savedPost.post_type === 'blog' ? '/blogs' : '/posts';
-        navigate(`${editBase}/${savedPost.id}/edit`, { replace: true });
+        navigateToEditor(savedPost);
       }
     } catch (error) {
       toast.error(error.message);
     } finally {
-      setSaving(false);
+      setSavingMode(null);
     }
   };
 
@@ -405,12 +564,16 @@ function PostEditorPage() {
       />
       {/* ── Title Bar ── */}
       <div className="cms-editor__title-bar">
-        <input
-          type="text"
-          className="cms-editor__title-input"
-          placeholder={isBlogRoute ? 'Enter blog title...' : 'Enter post title...'}
-          {...register('title', { required: 'Title is required.' })}
-        />
+        <label className="cms-editor__title-field">
+          <span className="cms-editor__title-label">Title</span>
+          <input
+            type="text"
+            className="cms-editor__title-input"
+            placeholder={isBlogRoute ? 'Enter blog title...' : 'Enter post title...'}
+            disabled={isReadOnlyMode}
+            {...register('title', { required: 'Title is required.' })}
+          />
+        </label>
         <div className="cms-editor__title-actions">
           {!isNewPostRoute && (
             <CustomSelect
@@ -418,7 +581,7 @@ function PostEditorPage() {
               value={watch('post_type')}
               onChange={val => setValue('post_type', val, { shouldValidate: true })}
               options={editorPostTypeOptions}
-              disabled={isBlogRoute}
+              disabled={isBlogRoute || isReadOnlyMode}
             />
           )}
 
@@ -434,18 +597,28 @@ function PostEditorPage() {
             Preview
           </button>
 
-          <button
-            type="submit"
-            className="btn btn--primary btn--compact"
-            disabled={saving}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
-            </svg>
-            {saving ? 'Saving...' : 'Save'}
-          </button>
+          {isReadOnlyMode ? (
+            <button
+              type="button"
+              className="btn btn--primary btn--compact"
+              onClick={() => setIsReadOnlyMode(false)}
+            >
+              Edit
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="btn btn--primary btn--compact"
+              disabled={isSaving}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+              {savingMode === 'draft' ? 'Saving...' : 'Save as draft'}
+            </button>
+          )}
         </div>
       </div>
       {errors.title && (
@@ -455,6 +628,30 @@ function PostEditorPage() {
       )}
 
       {/* ── Tab Bar ── */}
+      <div className="cms-editor__description-bar">
+        <label className="cms-editor__description-field">
+          <span className="cms-editor__description-label">Description</span>
+          <textarea
+            rows={3}
+            className="cms-editor__description-input"
+          placeholder={
+            isBlogRoute
+              ? 'Write a short description for this blog.'
+              : isEventPost
+                ? 'Write a short description for this post or event.'
+                : 'Write a short description for this post.'
+          }
+          {...descriptionField}
+          onChange={handleDescriptionChange}
+          disabled={isReadOnlyMode}
+        />
+      </label>
+        <small className="helper-text">Minimum 10 words, maximum 100 words.</small>
+        {errors.seo_description && (
+          <small className="field-error">{errors.seo_description.message}</small>
+        )}
+      </div>
+
       <div className="cms-editor__tabs">
         {TABS.map((tab) => (
           <button
@@ -469,6 +666,7 @@ function PostEditorPage() {
       </div>
 
       {/* ── Two-column Body ── */}
+      <fieldset className="cms-editor__fieldset" disabled={isReadOnlyMode}>
       <div className="cms-editor__body">
         <div className="cms-editor__main">
           {/* Content Tab */}
@@ -508,6 +706,7 @@ function PostEditorPage() {
                   value={contentState.html}
                   onChange={setContentState}
                   onImageUpload={handleEditorImageUpload}
+                  readOnly={isReadOnlyMode}
                 />
               </div>
 
@@ -528,7 +727,7 @@ function PostEditorPage() {
                           Choose an image from your media library or upload a new one for this post.
                         </p>
                       </div>
-                      
+
                     </div>
                     <button
                       type="button"
@@ -580,43 +779,24 @@ function PostEditorPage() {
                 </div>
               </div>
 
-              {/* Summary Block */}
-              <div className="cms-block">
-                <div className="cms-block__header">
-                  <div className="cms-block__title-group">
-                    <span className="cms-block__indicator cms-block__indicator--info" />
-                    <span className="cms-block__label">Summary</span>
+              {isBlogPost && (
+                <div className="cms-block">
+                  <div className="cms-block__header">
+                    <div className="cms-block__title-group">
+                      <span className="cms-block__indicator cms-block__indicator--info" />
+                      <span className="cms-block__label">Workflow</span>
+                    </div>
+                  </div>
+                <div className="cms-block__content">
+                  <div className="revision-note">
+                    <strong>Blog approval workflow</strong>
+                    <p>
+                        Wait for admin approval to reflect this on website.
+                    </p>
                   </div>
                 </div>
-                <div className="cms-block__content">
-                  {isBlogPost && (
-                    <div className="revision-note" style={{ marginBottom: '1rem' }}>
-                      <strong>Blog approval workflow</strong>
-                      <p>
-                        Blogs follow the same institutional review flow as news and events.
-                        Staff can save drafts, but submitting a blog sends it to admin for approval
-                        before publication.
-                      </p>
-                    </div>
-                  )}
-                  <textarea
-                    rows={3}
-                    placeholder={
-                      isEventPost
-                        ? 'Give editors and search engines a concise summary of the event.'
-                        : isBlogPost
-                          ? 'Summarize the blog article in a concise editorial abstract.'
-                        : 'Give editors and search engines a concise summary of the article.'
-                    }
-                    {...register('summary')}
-                  />
-                  {errors.summary && (
-                    <small className="field-error">
-                      {errors.summary.message}
-                    </small>
-                  )}
-                </div>
               </div>
+              )}
             </>
           )}
 
@@ -645,6 +825,14 @@ function PostEditorPage() {
                         <input type="time" {...register('event_time')} />
                       </label>
                       <label className="field-group">
+                        <span>Location</span>
+                        <input
+                          type="text"
+                          placeholder="Puducherry campus"
+                          {...register('location')}
+                        />
+                      </label>
+                      <label className="field-group">
                         <span>Venue</span>
                         <input
                           type="text"
@@ -652,22 +840,13 @@ function PostEditorPage() {
                           {...register('venue')}
                         />
                       </label>
-                      <label className="field-group">
-                        <span>Organizer</span>
-                        <input
-                          type="text"
-                          placeholder="Department of Computer Science"
-                          {...register('organizer')}
-                        />
-                      </label>
                     </>
                   ) : (
                     <div className="revision-note">
                       <strong>Article metadata</strong>
                       <p>
-                        Blogs and news posts do not require event schedule, venue,
-                        or organizer details. Focus on the article summary, category,
-                        tags, and featured image.
+                        Blogs and news posts do not require event schedule, location,
+                        or venue details. Focus on category, tags, and featured image.
                       </p>
                     </div>
                   )}
@@ -691,10 +870,10 @@ function PostEditorPage() {
               <span className="cms-sidebar-section__label">Author</span>
               <div className="cms-sidebar-author">
                 <div className="cms-sidebar-author__avatar">
-                  {(user?.email || 'U').charAt(0).toUpperCase()}
+                  {(authorDisplayName || 'U').charAt(0).toUpperCase()}
                 </div>
                 <span className="cms-sidebar-author__name">
-                  {user?.email?.split('@')[0] || 'Unknown'}
+                  {authorDisplayName}
                 </span>
               </div>
             </div>
@@ -715,10 +894,38 @@ function PostEditorPage() {
             <div className="cms-sidebar-section">
               <span className="cms-sidebar-section__label">Category</span>
               <CustomSelect
-                value={watch('category')}
-                onChange={val => setValue('category', val)}
-                options={CATEGORY_OPTIONS.map(opt => ({ value: opt, label: opt }))}
+                value={showCustomCategoryInput ? CUSTOM_CATEGORY_VALUE : selectedCategory}
+                onChange={(val) => {
+                  if (val === CUSTOM_CATEGORY_VALUE) {
+                    setIsCustomCategorySelected(true);
+                    setValue('category', '', { shouldDirty: true, shouldTouch: true });
+                    return;
+                  }
+
+                  setIsCustomCategorySelected(false);
+                  setValue('category', val, { shouldDirty: true, shouldTouch: true });
+                }}
+                options={categoryOptions}
               />
+              {showCustomCategoryInput && (
+                <>
+                  <div className='category-input'>
+                    <small className="helper-text category">Enter category</small>
+
+                  <input
+                    type="text"
+                    placeholder="Enter custom category"
+                    value={selectedCategory}
+                    onChange={(event) => {
+                      setValue('category', event.target.value, {
+                        shouldDirty: true,
+                        shouldTouch: true,
+                      });
+                    }}
+                  />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="cms-sidebar-section">
@@ -752,6 +959,15 @@ function PostEditorPage() {
               )}
             </div>
 
+            {existingPost?.review_notes && (
+              <div className="cms-sidebar-section">
+                <span className="cms-sidebar-section__label">Review Notes</span>
+                <div className="cms-sidebar-note">
+                  <p>{existingPost.review_notes}</p>
+                </div>
+              </div>
+            )}
+
             {existingPost?.status && (
               <div className="cms-sidebar-section">
                 <span className="cms-sidebar-section__label">Status</span>
@@ -761,38 +977,60 @@ function PostEditorPage() {
 
             <div className="cms-sidebar-section">
               <span className="cms-sidebar-section__label">College</span>
-              <span className="cms-sidebar-college">{selectedCollegeName}</span>
+              <span className="cms-sidebar-college">{collegeDisplayName}</span>
             </div>
 
             {isBlogPost && (
               <div className="cms-sidebar-section">
                 <span className="cms-sidebar-section__label">Publishing flow</span>
                 <small className="helper-text">
-                  Blog drafts stay private until an admin approves and publishes them.
+                  Wait for admin approval to reflect this on website.
                 </small>
               </div>
             )}
           </div>
 
-          <div className="cms-sidebar-card cms-sidebar-card--actions">
+          {!isReadOnlyMode && (
+            <div className="cms-sidebar-card cms-sidebar-card--actions">
             <button
               type="submit"
               className="btn btn--outline btn--full"
-              disabled={saving}
+              disabled={isSaving}
             >
-              {saving ? 'Saving...' : 'Save Draft'}
+              {savingMode === 'draft' ? 'Saving...' : 'Save Draft'}
             </button>
             <button
               type="button"
-              className="btn btn--primary btn--full"
+              className={`submit-review-btn${savingMode === 'submit' ? ' is-submitting' : ''}${isLocked ? ' is-success' : ''}`}
               onClick={handleSubmit(() => persistPost('submit'))}
-              disabled={saving}
+              disabled={isSaving || isLocked}
             >
-              {saving ? 'Saving...' : 'Submit for Review'}
+              <span className="submit-review-btn__icon">
+                {isLocked ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18">
+                    <path fill="none" d="M0 0h24v24H0z" />
+                    <path fill="currentColor" d="M10 15.172l9.192-9.193 1.415 1.414L10 18l-6.364-6.364 1.414-1.414z" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18">
+                    <path fill="none" d="M0 0h24v24H0z" />
+                    <path fill="currentColor" d="M1.946 9.315c-.522-.174-.527-.455.01-.634l19.087-6.362c.529-.176.832.12.684.638l-5.454 19.086c-.15.529-.455.547-.679.045L12 14l6-8-8 6-8.054-2.685z" />
+                  </svg>
+                )}
+              </span>
+              <span className="submit-review-btn__label">
+                {isLocked
+                  ? 'Submitted!'
+                  : savingMode === 'submit'
+                    ? (isAdmin ? 'Publishing...' : 'Submitting...')
+                    : (isAdmin ? 'Publish' : 'Submit for Review')}
+              </span>
             </button>
           </div>
+          )}
         </aside>
       </div>
+      </fieldset>
     </form>
   );
 }

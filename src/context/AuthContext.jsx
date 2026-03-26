@@ -9,7 +9,32 @@ import {
   fetchProfile,
   updateSelectedCollege,
 } from '@/services/profileService';
+import { clearCollegesCache, listColleges } from '@/services/collegesService';
 import { AuthContext } from './authContextValue';
+
+const DEFAULT_ADMIN_COLLEGE_ID = 'smvec-engineering-college';
+
+function normalizeCollegeKey(value = '') {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function resolveDefaultAdminCollegeId(colleges = []) {
+  if (!colleges.length) {
+    return null;
+  }
+
+  const directMatch = colleges.find((college) => college.id === DEFAULT_ADMIN_COLLEGE_ID);
+  if (directMatch) {
+    return directMatch.id;
+  }
+
+  const targetNameKey = normalizeCollegeKey('SMVEC Engineering college');
+  const nameMatch = colleges.find(
+    (college) => normalizeCollegeKey(college.name || '') === targetNameKey,
+  );
+
+  return nameMatch?.id || colleges[0].id;
+}
 
 async function loadProfile(session) {
   if (!session?.user) {
@@ -19,9 +44,23 @@ async function loadProfile(session) {
   return fetchOrCreateProfile(session.user);
 }
 
+async function ensureAdminDefaultCollege({ profile, colleges, userId }) {
+  if (!profile || profile.role !== 'admin' || profile.selected_college_id) {
+    return profile;
+  }
+
+  const defaultCollegeId = resolveDefaultAdminCollegeId(colleges);
+  if (!defaultCollegeId) {
+    return profile;
+  }
+
+  return updateSelectedCollege({ userId, collegeId: defaultCollegeId });
+}
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [colleges, setColleges] = useState([]);
   const [loading, setLoading] = useState(true);
   const bootstrapCompleteRef = useRef(false);
 
@@ -49,8 +88,21 @@ export function AuthProvider({ children }) {
         setSession(activeSession);
 
         if (activeSession?.user) {
-          const profileData = await loadProfile(activeSession);
-          if (mounted) setProfile(profileData);
+          const [rawProfileData, collegesData] = await Promise.all([
+            loadProfile(activeSession),
+            listColleges({ force: true }),
+          ]);
+          const profileData = await ensureAdminDefaultCollege({
+            profile: rawProfileData,
+            colleges: collegesData,
+            userId: activeSession.user.id,
+          });
+          if (mounted) {
+            setProfile(profileData);
+            setColleges(collegesData);
+          }
+        } else if (mounted) {
+          setColleges([]);
         }
       } catch (error) {
         if (mounted) toast.error(error.message);
@@ -76,10 +128,22 @@ export function AuthProvider({ children }) {
       setSession(nextSession);
 
       if (nextSession?.user) {
-        const profileData = await loadProfile(nextSession);
-        if (mounted) setProfile(profileData);
+        const [rawProfileData, collegesData] = await Promise.all([
+          loadProfile(nextSession),
+          listColleges({ force: true }),
+        ]);
+        const profileData = await ensureAdminDefaultCollege({
+          profile: rawProfileData,
+          colleges: collegesData,
+          userId: nextSession.user.id,
+        });
+        if (mounted) {
+          setProfile(profileData);
+          setColleges(collegesData);
+        }
       } else {
         setProfile(null);
+        setColleges([]);
       }
 
       setLoading(false);
@@ -104,8 +168,17 @@ export function AuthProvider({ children }) {
   const handleSignIn = async (credentials) => {
     const data = await signInWithPassword(credentials);
     setSession(data.session);
-    const profileData = await loadProfile(data.session);
+    const [rawProfileData, collegesData] = await Promise.all([
+      loadProfile(data.session),
+      listColleges({ force: true }),
+    ]);
+    const profileData = await ensureAdminDefaultCollege({
+      profile: rawProfileData,
+      colleges: collegesData,
+      userId: data.session.user.id,
+    });
     setProfile(profileData);
+    setColleges(collegesData);
     return profileData;
   };
 
@@ -113,8 +186,10 @@ export function AuthProvider({ children }) {
     try {
       await signOut();
       clearProfileCache(session?.user?.id);
+      clearCollegesCache();
       setSession(null);
       setProfile(null);
+      setColleges([]);
     } catch (error) {
       toast.error(error.message);
       throw error;
@@ -138,9 +213,16 @@ export function AuthProvider({ children }) {
     profile,
     isAuthenticated: Boolean(session?.user),
     isAdmin: profile?.role === 'admin',
+    colleges,
+    getCollegeNameById: (collegeId) => getCollegeName(collegeId, colleges),
     selectedCollegeId: profile?.selected_college_id || null,
-    selectedCollegeName: getCollegeName(profile?.selected_college_id),
-    requiresCollegeSelection: Boolean(session?.user && profile && !profile.selected_college_id),
+    selectedCollegeName: getCollegeName(profile?.selected_college_id, colleges),
+    requiresCollegeSelection: Boolean(
+      session?.user
+      && profile
+      && profile.role !== 'admin'
+      && !profile.selected_college_id,
+    ),
     signIn: handleSignIn,
     signOut: handleSignOut,
     selectCollege: handleCollegeSelect,

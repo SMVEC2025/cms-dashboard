@@ -24,7 +24,11 @@ function LoginPage() {
     try {
       setSubmitting(true);
       const profile = await signIn({ email, password });
-      const destination = profile?.selected_college_id ? location.state?.from?.pathname || '/' : '/select-college';
+      const isAdmin = profile?.role === 'admin';
+      const hasCollege = Boolean(profile?.selected_college_id);
+      const destination = (isAdmin || hasCollege)
+        ? location.state?.from?.pathname || '/'
+        : '/select-college';
       navigate(destination, { replace: true });
       toast.success('Welcome back.');
     } catch (error) {

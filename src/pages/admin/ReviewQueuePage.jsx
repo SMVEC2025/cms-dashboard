@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import EmptyState from '@/components/common/EmptyState';
 import StatusBadge from '@/components/common/StatusBadge';
 import CustomSelect from '@/components/ui/CustomSelect';
 import { useAuth } from '@/hooks/useAuth';
-import { COLLEGES, POST_STATUS } from '@/lib/constants';
+import { POST_STATUS } from '@/lib/constants';
 import { formatDate, formatPostTypeLabel } from '@/lib/utils';
 import { listReviewQueue, updateReviewStatus } from '@/services/postsService';
 import PostPreview from '@/components/preview/PostPreview';
@@ -23,15 +24,17 @@ const postTypeOptions = [
 ];
 
 function ReviewQueuePage() {
-  const { user, profile, selectedCollegeName } = useAuth();
-  const [collegeFilter, setCollegeFilter] = useState(profile?.selected_college_id || '');
-  const [statusFilter, setStatusFilter] = useState('');
+  const { user, colleges, selectedCollegeName } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [collegeFilter, setCollegeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(POST_STATUS.SUBMITTED);
   const [postTypeFilter, setPostTypeFilter] = useState('');
   const [queue, setQueue] = useState([]);
   const [activeId, setActiveId] = useState('');
   const [reviewNotes, setReviewNotes] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const requestedPostId = searchParams.get('postId');
 
   const activePost = useMemo(() => queue.find((item) => item.id === activeId) || queue[0], [activeId, queue]);
 
@@ -44,14 +47,19 @@ function ReviewQueuePage() {
         postType: postTypeFilter,
       });
       setQueue(data);
-      setActiveId(data[0]?.id || '');
-      setReviewNotes(data[0]?.review_notes || '');
+      const matchedPost = requestedPostId
+        ? data.find((item) => item.id === requestedPostId)
+        : null;
+      const nextActivePost = matchedPost || data[0];
+
+      setActiveId(nextActivePost?.id || '');
+      setReviewNotes(nextActivePost?.review_notes || '');
     } catch (error) {
       toast.error(error.message);
     } finally {
       setLoading(false);
     }
-  }, [collegeFilter, postTypeFilter, statusFilter]);
+  }, [collegeFilter, postTypeFilter, requestedPostId, statusFilter]);
 
   useEffect(() => {
     loadQueue();
@@ -100,7 +108,7 @@ function ReviewQueuePage() {
             onChange={setCollegeFilter}
             options={[
               { value: '', label: 'All colleges' },
-              ...COLLEGES.map(c => ({ value: c.id, label: c.name })),
+              ...colleges.map(c => ({ value: c.id, label: c.name })),
             ]}
             placeholder="All colleges"
           />
@@ -164,10 +172,7 @@ function ReviewQueuePage() {
         {activePost ? (
           <>
             <div className="panel__header">
-              <div>
-                <span className="eyebrow">Full preview</span>
-                <h3>{activePost.title}</h3>
-              </div>
+              <h3 className="panel__title">{activePost.title}</h3>
               <StatusBadge status={activePost.status} />
             </div>
 
@@ -176,7 +181,6 @@ function ReviewQueuePage() {
                 ...activePost,
                 tags: activePost.tags || [],
                 content_html: activePost.content_html || '',
-                summary: activePost.summary,
               }}
               selectedCollegeName={activePost.college_name || selectedCollegeName}
             />
@@ -208,7 +212,7 @@ function ReviewQueuePage() {
             </div>
           </>
         ) : (
-          <EmptyState title="Select a post" description="Choose an item from the queue to review its full content." />
+          <EmptyState title="No queued events and blogs are found" description="" />
         )}
       </section>
     </div>

@@ -15,6 +15,7 @@ const DashboardPage = lazy(() => import('@/pages/dashboard/DashboardPage'));
 const PostListPage = lazy(() => import('@/pages/posts/PostListPage'));
 const PostEditorPage = lazy(() => import('@/pages/posts/PostEditorPage'));
 const ReviewQueuePage = lazy(() => import('@/pages/admin/ReviewQueuePage'));
+const DraftsPage = lazy(() => import('@/pages/posts/DraftsPage'));
 const GalleryPage = lazy(() => import('@/pages/media/GalleryPage'));
 const UploadsPage = lazy(() => import('@/pages/media/UploadsPage'));
 
@@ -57,6 +58,7 @@ function AppRoutes() {
         <Route path="blogs" element={<PostListPage />} />
         <Route path="blogs/new" element={<PostEditorPage />} />
         <Route path="blogs/:postId/edit" element={<PostEditorPage />} />
+        <Route path="drafts" element={<DraftsPage />} />
         <Route path="gallery" element={<GalleryPage />} />
         <Route path="uploads" element={<UploadsPage />} />
         <Route

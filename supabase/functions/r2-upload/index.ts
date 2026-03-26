@@ -46,6 +46,7 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const bucketName = Deno.env.get('R2_BUCKET_NAME') ?? Deno.env.get('R2_BUCKET') ?? '';
     const publicBase = Deno.env.get('R2_PUBLIC_URL') ?? Deno.env.get('R2_PUBLIC_BASE_URL') ?? '';
+    const defaultFolder = Deno.env.get('R2_UPLOAD_FOLDER') ?? 'institutional-cms';
 
     if (!supabaseUrl || !serviceRoleKey) {
       console.error('r2-upload missing supabase secrets', {
@@ -106,9 +107,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Expected a file upload.' }, 400);
     }
 
+    if (file.size > 10 * 1024 * 1024) {
+      return jsonResponse({ error: 'File is too large. Maximum upload size is 10 MB.' }, 413);
+    }
+
     const extension = file.name.includes('.') ? file.name.split('.').pop() : 'bin';
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '-').toLowerCase();
-    const key = `${profile.selected_college_id}/${folder}/${crypto.randomUUID()}-${sanitizedName || `asset.${extension}`}`;
+    const keyFolder = [defaultFolder, folder].filter(Boolean).join('/');
+    const key = `${profile.selected_college_id}/${keyFolder}/${crypto.randomUUID()}-${sanitizedName || `asset.${extension}`}`;
     const bytes = new Uint8Array(await file.arrayBuffer());
 
     try {
@@ -139,7 +145,7 @@ Deno.serve(async (req) => {
         bucket_key: key,
         public_url: publicUrl,
         file_name: file.name,
-        mime_type: file.type,
+        mime_type: file.type || 'application/octet-stream',
         size_bytes: file.size,
         context: folder,
         metadata: {
@@ -171,6 +177,12 @@ Deno.serve(async (req) => {
       key,
       publicUrl,
       fileName: asset.file_name,
+      mimeType: asset.mime_type,
+      sizeBytes: asset.size_bytes,
+      context: asset.context,
+      createdAt: asset.created_at,
+      provider: 'cloudflare-r2',
+      bytes: file.size,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown upload error.';
