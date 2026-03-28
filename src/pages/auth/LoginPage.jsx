@@ -42,9 +42,9 @@ function LoginPage() {
     <div className="login-page">
       {/* Left — Illustration panel */}
       <div className="login-page__art">
-
         <div className="login-page__art-content">
-          <img className='logo-img' src="/whitelogo.png" alt="" />
+          <span className="login-page__art-chip">Institutional Publishing Suite</span>
+          <img className="logo-img" src="/whitelogo.png" alt="SMVEC CMS logo" />
 
           <h2 className="login-page__art-heading">
             SMVEC CMS
@@ -53,8 +53,34 @@ function LoginPage() {
             Sign in to access your dashboard and manage your content across colleges.
           </p>
 
-          {/* Floating dashboard mockup cards */}
+          <div className="login-page__art-metrics">
+            <article className="login-page__art-metric-card">
+              <p className="login-page__art-metric-label">Publishing Velocity</p>
+              <strong className="login-page__art-metric-value">5x Faster</strong>
+              <span className="login-page__art-metric-note">Draft-to-live workflow for distributed teams.</span>
+            </article>
 
+            <article className="login-page__art-metric-card login-page__art-metric-card--accent">
+              <p className="login-page__art-metric-label">Campus Reach</p>
+              <strong className="login-page__art-metric-value">14 Institutions</strong>
+              <span className="login-page__art-metric-note">Unified workspace with role-based access control.</span>
+            </article>
+          </div>
+
+          <div className="login-page__art-strip">
+            <div className="login-page__art-strip-item">
+              <span className="login-page__art-strip-dot" />
+              <span>Approval-ready publishing pipeline</span>
+            </div>
+            <div className="login-page__art-strip-item">
+              <span className="login-page__art-strip-dot" />
+              <span>Centralized media and document import</span>
+            </div>
+            <div className="login-page__art-strip-item">
+              <span className="login-page__art-strip-dot" />
+              <span>College-specific dashboards and analytics</span>
+            </div>
+          </div>
         </div>
       </div>
 
