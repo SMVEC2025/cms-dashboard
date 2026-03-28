@@ -3,8 +3,23 @@ import { requireSupabase } from '@/lib/supabase';
 const mediaFunctionName = import.meta.env.VITE_SUPABASE_MEDIA_FUNCTION || 'r2-upload';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const IMAGE_MIME_PREFIX = 'image/';
-const IMAGE_MAX_DIMENSION = 1920;
-const IMAGE_WEBP_QUALITY = 0.82;
+const IMAGE_PROCESSING_PRESETS = {
+  default: {
+    maxDimension: 1920,
+    quality: 0.82,
+    skipBelowBytes: 0,
+    minSavingsRatio: 0.05,
+  },
+  fast: {
+    maxDimension: 1440,
+    quality: 0.74,
+    skipBelowBytes: 350 * 1024,
+    minSavingsRatio: 0.02,
+  },
+};
+const FOLDER_COMPRESSION_PRESET = {
+  'editor-media': 'fast',
+};
 
 function isAbsoluteUrl(value) {
   return /^https?:\/\//i.test(value || '');
@@ -38,16 +53,34 @@ function loadImageFromFile(file) {
   });
 }
 
-async function compressImageFile(file) {
+function resolveCompressionPreset(folder, requestedPreset) {
+  if (requestedPreset && IMAGE_PROCESSING_PRESETS[requestedPreset]) {
+    return IMAGE_PROCESSING_PRESETS[requestedPreset];
+  }
+
+  const folderPreset = FOLDER_COMPRESSION_PRESET[folder];
+  if (folderPreset && IMAGE_PROCESSING_PRESETS[folderPreset]) {
+    return IMAGE_PROCESSING_PRESETS[folderPreset];
+  }
+
+  return IMAGE_PROCESSING_PRESETS.default;
+}
+
+async function compressImageFileByPreset(file, preset) {
   if (!shouldProcessImage(file)) {
     return file;
   }
 
   try {
+    if (file.size <= preset.skipBelowBytes) {
+      return file;
+    }
+
     const image = await loadImageFromFile(file);
-    const scale = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(image.width, image.height));
+    const scale = Math.min(1, preset.maxDimension / Math.max(image.width, image.height));
     const targetWidth = Math.max(1, Math.round(image.width * scale));
     const targetHeight = Math.max(1, Math.round(image.height * scale));
+    const resized = targetWidth !== image.width || targetHeight !== image.height;
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
 
@@ -60,10 +93,14 @@ async function compressImageFile(file) {
     context.drawImage(image, 0, 0, targetWidth, targetHeight);
 
     const blob = await new Promise((resolve) => {
-      canvas.toBlob(resolve, 'image/webp', IMAGE_WEBP_QUALITY);
+      canvas.toBlob(resolve, 'image/webp', preset.quality);
     });
 
     if (!blob) {
+      return file;
+    }
+
+    if (!resized && blob.size >= file.size * (1 - preset.minSavingsRatio)) {
       return file;
     }
 
@@ -204,8 +241,14 @@ async function ensureMediaAssetMetadata({ client, session, payload, folder, file
   };
 }
 
-export async function uploadMedia({ file, folder = 'posts', folderId = null }) {
-  const uploadFile = await compressImageFile(file);
+export async function uploadMedia({
+  file,
+  folder = 'posts',
+  folderId = null,
+  compressionProfile = undefined,
+}) {
+  const compressionPreset = resolveCompressionPreset(folder, compressionProfile);
+  const uploadFile = await compressImageFileByPreset(file, compressionPreset);
   const formData = new FormData();
   formData.append('file', uploadFile);
   formData.append('folder', folder);

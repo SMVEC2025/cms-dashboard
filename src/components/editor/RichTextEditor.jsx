@@ -70,6 +70,47 @@ function RichTextEditor({ value, onChange, onImageUpload, readOnly = false }) {
     content: value || '',
     editorProps: {
       attributes: { class: 'editor-surface__content' },
+      handlePaste: (_view, event) => {
+        if (!onImageUpload || !editor?.isEditable) {
+          return false;
+        }
+
+        const clipboardItems = Array.from(event.clipboardData?.items || []);
+        const imageItem = clipboardItems.find((item) => item.type?.startsWith('image/'));
+        if (!imageItem) {
+          return false;
+        }
+
+        const file = imageItem.getAsFile();
+        if (!file) {
+          return false;
+        }
+
+        event.preventDefault();
+
+        void (async () => {
+          try {
+            const asset = await onImageUpload(file);
+            const assetName = asset?.fileName || asset?.name || file.name || 'Image';
+            const assetUrl = asset?.publicUrl || asset?.url;
+            if (!assetUrl || !editor?.isEditable) {
+              return;
+            }
+
+            editor.chain().focus().setAlignedImage({
+              src: assetUrl,
+              alt: assetName,
+              title: assetName,
+              align: 'left',
+              width: '56%',
+            }).run();
+          } catch (error) {
+            console.error('Failed to upload pasted image', error);
+          }
+        })();
+
+        return true;
+      },
     },
     editable: !readOnly,
     onUpdate: ({ editor: e }) => {
@@ -121,6 +162,33 @@ function RichTextEditor({ value, onChange, onImageUpload, readOnly = false }) {
   const isImageSelection = editor?.isActive('image');
   const currentImageAlign = editor?.getAttributes('image').align || 'left';
   const currentImageWidth = editor?.getAttributes('image').width || '56%';
+  const hasRangeSelection = editor ? !editor.state.selection.empty : false;
+  const H1_SIZE = '32px';
+  const H2_SIZE = '28px';
+  const P_SIZE = '16px';
+
+  const applyHeadingLevel = (level) => {
+    if (!editor) return;
+
+    if (hasRangeSelection) {
+      const fontSize = level === 1 ? H1_SIZE : H2_SIZE;
+      editor.chain().focus().setMark('textStyle', { fontSize }).run();
+      return;
+    }
+
+    editor.chain().focus().toggleHeading({ level }).run();
+  };
+
+  const applyParagraph = () => {
+    if (!editor) return;
+
+    if (hasRangeSelection) {
+      editor.chain().focus().setMark('textStyle', { fontSize: P_SIZE }).run();
+      return;
+    }
+
+    editor.chain().focus().setParagraph().run();
+  };
 
   return (
     <div className="editor-surface">
@@ -229,23 +297,23 @@ function RichTextEditor({ value, onChange, onImageUpload, readOnly = false }) {
 
           <div className="bubble-menu__group">
             <BubbleBtn
-              active={editor.isActive('heading', { level: 1 })}
-              onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+              active={editor.isActive('heading', { level: 1 }) || (hasRangeSelection && currentFontSize === H1_SIZE)}
+              onClick={() => applyHeadingLevel(1)}
               title="Heading 1"
             >
               <span className="bubble-menu__label">H1</span>
             </BubbleBtn>
             <BubbleBtn
-              active={editor.isActive('heading', { level: 2 })}
-              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+              active={editor.isActive('heading', { level: 2 }) || (hasRangeSelection && currentFontSize === H2_SIZE)}
+              onClick={() => applyHeadingLevel(2)}
               title="Heading 2"
             >
               <span className="bubble-menu__label">H2</span>
             </BubbleBtn>
 
             <BubbleBtn
-              active={editor.isActive('paragraph')}
-              onClick={() => editor.chain().focus().setParagraph().run()}
+              active={editor.isActive('paragraph') || (hasRangeSelection && currentFontSize === P_SIZE)}
+              onClick={applyParagraph}
               title="Paragraph"
             >
               <span className="bubble-menu__label">P</span>

@@ -4822,6 +4822,13 @@ textarea {
   outline: none;
 }
 
+.editor-surface__content::after,
+.tiptap-content::after {
+  content: '';
+  display: table;
+  clear: both;
+}
+
 .editor-surface__content .is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
@@ -4879,19 +4886,23 @@ textarea {
 
 .editor-surface__content img.is-left,
 .tiptap-content img.is-left {
-  margin-left: 0;
-  margin-right: auto;
+  float: left;
+  margin: 0 1rem 0.75rem 0;
 }
 
 .editor-surface__content img.is-center,
 .tiptap-content img.is-center {
+  clear: both;
+  float: none;
   margin-left: auto;
   margin-right: auto;
+  margin-bottom: 0.75rem;
 }
 
 .editor-surface__content img.is-right,
 .tiptap-content img.is-right {
-  margin-left: auto;
+  float: right;
+  margin: 0 0 0.75rem 1rem;
 }
 
 .editor-resizable-image {
@@ -4909,17 +4920,21 @@ textarea {
 }
 
 .editor-resizable-image.is-left {
-  margin-left: 0;
-  margin-right: auto;
+  float: left;
+  margin: 0 1rem 0.75rem 0;
 }
 
 .editor-resizable-image.is-center {
+  clear: both;
+  float: none;
   margin-left: auto;
   margin-right: auto;
+  margin-bottom: 0.75rem;
 }
 
 .editor-resizable-image.is-right {
-  margin-left: auto;
+  float: right;
+  margin: 0 0 0.75rem 1rem;
 }
 
 .editor-resizable-image.is-selected img {

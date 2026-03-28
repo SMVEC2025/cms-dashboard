@@ -27,6 +27,30 @@ function ToolbarDivider() {
 function EditorToolbar({ editor, onImageSelect, uploadInProgress }) {
   if (!editor) return null;
 
+  const hasRangeSelection = !editor.state.selection.empty;
+  const H1_SIZE = '32px';
+  const H2_SIZE = '28px';
+  const P_SIZE = '16px';
+
+  const applyHeadingLevel = (level) => {
+    if (hasRangeSelection) {
+      const fontSize = level === 1 ? H1_SIZE : H2_SIZE;
+      editor.chain().focus().setMark('textStyle', { fontSize }).run();
+      return;
+    }
+
+    editor.chain().focus().toggleHeading({ level }).run();
+  };
+
+  const applyParagraph = () => {
+    if (hasRangeSelection) {
+      editor.chain().focus().setMark('textStyle', { fontSize: P_SIZE }).run();
+      return;
+    }
+
+    editor.chain().focus().setParagraph().run();
+  };
+
   const handleSetLink = () => {
     const previousUrl = editor.getAttributes('link').href || '';
     const nextUrl = window.prompt('Enter link URL', previousUrl);
@@ -75,23 +99,23 @@ function EditorToolbar({ editor, onImageSelect, uploadInProgress }) {
       {/* H1 · H2 · P */}
       <div className="editor-toolbar__group">
         <ToolbarButton
-          active={editor.isActive('heading', { level: 1 })}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+          active={editor.isActive('heading', { level: 1 }) || (hasRangeSelection && currentFontSize === H1_SIZE)}
+          onClick={() => applyHeadingLevel(1)}
           title="Heading 1"
         >
           <span className="editor-toolbar__label">H1</span>
         </ToolbarButton>
         <ToolbarButton
-          active={editor.isActive('heading', { level: 2 })}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          active={editor.isActive('heading', { level: 2 }) || (hasRangeSelection && currentFontSize === H2_SIZE)}
+          onClick={() => applyHeadingLevel(2)}
           title="Heading 2"
         >
           <span className="editor-toolbar__label">H2</span>
         </ToolbarButton>
 
         <ToolbarButton
-          active={editor.isActive('paragraph')}
-          onClick={() => editor.chain().focus().setParagraph().run()}
+          active={editor.isActive('paragraph') || (hasRangeSelection && currentFontSize === P_SIZE)}
+          onClick={applyParagraph}
           title="Paragraph"
         >
           <span className="editor-toolbar__label">P</span>

@@ -8,8 +8,8 @@ const AlignedImage = Image.extend({
     return {
       ...this.parent?.(),
       align: {
-        default: 'center',
-        parseHTML: (element) => element.getAttribute('data-align') || 'center',
+        default: 'left',
+        parseHTML: (element) => element.getAttribute('data-align') || 'left',
         renderHTML: (attributes) => ({
           'data-align': attributes.align,
           class: `is-${attributes.align}`,
@@ -43,14 +43,17 @@ const AlignedImage = Image.extend({
       setAlignedImage:
         (options) =>
         ({ commands }) =>
-          commands.insertContent({
-            type: this.name,
-            attrs: {
-              ...options,
-              align: options.align || 'center',
-              width: options.width || '68%',
+          commands.insertContent([
+            {
+              type: this.name,
+              attrs: {
+                ...options,
+                align: options.align || 'left',
+                width: options.width || '68%',
+              },
             },
-          }),
+            { type: 'paragraph' },
+          ]),
       setImageAlign:
         (align) =>
         ({ state, commands }) => {
