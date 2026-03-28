@@ -1,0 +1,5 @@
+[functions.get-posts-by-college]
+verify_jwt = false
+
+[functions.posts]
+verify_jwt = false
