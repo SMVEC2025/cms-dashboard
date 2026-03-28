@@ -30,7 +30,13 @@ function SkeletonRow() {
 }
 
 function DraftsPage() {
-  const { profile, user, selectedCollegeName, getCollegeNameById } = useAuth();
+  const {
+    profile,
+    user,
+    selectedCollegeName,
+    getCollegeNameById,
+    loading: authLoading,
+  } = useAuth();
   const [typeFilter, setTypeFilter]   = useState('all');
   const [search, setSearch]           = useState('');
   const [drafts, setDrafts]           = useState([]);
@@ -53,10 +59,24 @@ function DraftsPage() {
   }, [typeFilter, drafts, postsDrafts, blogsDrafts]);
 
   useEffect(() => {
+    let active = true;
+
     const load = async () => {
-      if (!role || !userId) return;
+      if (authLoading) {
+        return;
+      }
+
+      if (!role || !userId) {
+        if (active) {
+          setDrafts([]);
+          setLoading(false);
+        }
+        return;
+      }
       try {
-        setLoading(true);
+        if (active) {
+          setLoading(true);
+        }
         const data = await listPosts({
           role,
           userId,
@@ -64,15 +84,24 @@ function DraftsPage() {
           status: POST_STATUS.DRAFT,
           search: deferredSearch,
         });
-        setDrafts(data);
+        if (active) {
+          setDrafts(data);
+        }
       } catch (error) {
-        toast.error(error.message);
+        if (active) {
+          toast.error(error.message);
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
     load();
-  }, [collegeId, deferredSearch, role, userId]);
+    return () => {
+      active = false;
+    };
+  }, [authLoading, collegeId, deferredSearch, role, userId]);
 
   const openPreview = async (post) => {
     try {

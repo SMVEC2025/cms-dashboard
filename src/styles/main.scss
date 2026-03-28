@@ -538,6 +538,11 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: center;
+
+  .logo-img {
+    width: 70px;
+    margin-bottom: 20px;
+  }
 }
 
 .login-page__art-content {
@@ -554,8 +559,8 @@ kbd {
 .login-page__art-heading {
   margin: 0 0 0.75rem;
   font-size: 2.25rem;
-  font-weight: 800;
-  color: #fff;
+  font-weight: 700;
+  color: #e9e9e9;
   line-height: 1.2;
   max-width: 420px;
 }
@@ -719,16 +724,18 @@ kbd {
 
 .login-page__brand-name {
   font-size: 1.15rem;
-  font-weight: 700;
-  color: #1a1a2e;
+  font-weight: 600;
+  color: #1a1a2ee0;
   letter-spacing: -0.01em;
+  margin-bottom: 20px;
 }
 
 .login-page__title {
   margin: 0 0 0.5rem;
   font-size: 2rem;
-  font-weight: 800;
-  color: #1a1a2e;
+  font-weight: 600;
+  color: #1a1a2ee0;
+  margin-bottom: 20px;
 }
 
 .login-page__subtitle {
@@ -2187,13 +2194,17 @@ textarea {
   border-radius: 12px;
   font-size: 0.7rem;
   font-weight: 500;
-  text-transform: uppercase;
+  text-transform: capitalize;
   letter-spacing: 0.04em;
 }
 
 .story-card__badge--published {
-  background: rgba(34, 197, 94, 0.12);
-  color: #15803d;
+  background: rgba(14, 156, 64, 0.26);
+  color: #e2ffed;
+  border: 1px solid rgb(101, 146, 101);
+  letter-spacing: 0.7px;
+  font-weight: 400;
+
 }
 
 .story-card__badge--pending {

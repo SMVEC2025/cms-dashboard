@@ -57,6 +57,23 @@ async function ensureAdminDefaultCollege({ profile, colleges, userId }) {
   return updateSelectedCollege({ userId, collegeId: defaultCollegeId });
 }
 
+async function loadSessionContext(session, { forceColleges = false } = {}) {
+  const [profileResult, collegesResult] = await Promise.allSettled([
+    loadProfile(session),
+    listColleges({ force: forceColleges }),
+  ]);
+
+  if (profileResult.status === 'rejected') {
+    throw profileResult.reason;
+  }
+
+  return {
+    profileData: profileResult.value,
+    collegesData: collegesResult.status === 'fulfilled' ? collegesResult.value : [],
+    collegesError: collegesResult.status === 'rejected' ? collegesResult.reason : null,
+  };
+}
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -88,10 +105,14 @@ export function AuthProvider({ children }) {
         setSession(activeSession);
 
         if (activeSession?.user) {
-          const [rawProfileData, collegesData] = await Promise.all([
-            loadProfile(activeSession),
-            listColleges({ force: true }),
-          ]);
+          const {
+            profileData: rawProfileData,
+            collegesData,
+            collegesError,
+          } = await loadSessionContext(activeSession, { forceColleges: true });
+          if (collegesError && mounted) {
+            toast.error(collegesError.message || 'Failed to load colleges.');
+          }
           const profileData = await ensureAdminDefaultCollege({
             profile: rawProfileData,
             colleges: collegesData,
@@ -102,10 +123,15 @@ export function AuthProvider({ children }) {
             setColleges(collegesData);
           }
         } else if (mounted) {
+          setProfile(null);
           setColleges([]);
         }
       } catch (error) {
-        if (mounted) toast.error(error.message);
+        if (mounted) {
+          toast.error(error.message);
+          setProfile(null);
+          setColleges([]);
+        }
       } finally {
         clearTimeout(timeout);
         if (mounted) {
@@ -125,28 +151,42 @@ export function AuthProvider({ children }) {
       // Skip events until bootstrap finishes to avoid race conditions
       if (!bootstrapCompleteRef.current) return;
 
-      setSession(nextSession);
+      try {
+        setSession(nextSession);
 
-      if (nextSession?.user) {
-        const [rawProfileData, collegesData] = await Promise.all([
-          loadProfile(nextSession),
-          listColleges({ force: true }),
-        ]);
-        const profileData = await ensureAdminDefaultCollege({
-          profile: rawProfileData,
-          colleges: collegesData,
-          userId: nextSession.user.id,
-        });
-        if (mounted) {
-          setProfile(profileData);
-          setColleges(collegesData);
+        if (nextSession?.user) {
+          const {
+            profileData: rawProfileData,
+            collegesData,
+            collegesError,
+          } = await loadSessionContext(nextSession);
+          if (collegesError && mounted) {
+            toast.error(collegesError.message || 'Failed to load colleges.');
+          }
+          const profileData = await ensureAdminDefaultCollege({
+            profile: rawProfileData,
+            colleges: collegesData,
+            userId: nextSession.user.id,
+          });
+          if (mounted) {
+            setProfile(profileData);
+            setColleges(collegesData);
+          }
+        } else if (mounted) {
+          setProfile(null);
+          setColleges([]);
         }
-      } else {
-        setProfile(null);
-        setColleges([]);
+      } catch (error) {
+        if (mounted) {
+          toast.error(error.message);
+          setProfile(null);
+          setColleges([]);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-
-      setLoading(false);
     });
 
     return () => {
@@ -168,10 +208,14 @@ export function AuthProvider({ children }) {
   const handleSignIn = async (credentials) => {
     const data = await signInWithPassword(credentials);
     setSession(data.session);
-    const [rawProfileData, collegesData] = await Promise.all([
-      loadProfile(data.session),
-      listColleges({ force: true }),
-    ]);
+    const {
+      profileData: rawProfileData,
+      collegesData,
+      collegesError,
+    } = await loadSessionContext(data.session);
+    if (collegesError) {
+      toast.error(collegesError.message || 'Failed to load colleges.');
+    }
     const profileData = await ensureAdminDefaultCollege({
       profile: rawProfileData,
       colleges: collegesData,

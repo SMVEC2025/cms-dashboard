@@ -35,7 +35,14 @@ function SkeletonRow() {
 
 function PostListPage() {
   const location = useLocation();
-  const { profile, user, colleges, selectedCollegeName, getCollegeNameById } = useAuth();
+  const {
+    profile,
+    user,
+    colleges,
+    selectedCollegeName,
+    getCollegeNameById,
+    loading: authLoading,
+  } = useAuth();
   const [status, setStatus] = useState('');
   const [collegeFilter, setCollegeFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -91,10 +98,24 @@ function PostListPage() {
   };
 
   useEffect(() => {
+    let active = true;
+
     const loadPosts = async () => {
-      if (!role || !userId) return;
+      if (authLoading) {
+        return;
+      }
+
+      if (!role || !userId) {
+        if (active) {
+          setPosts([]);
+          setLoading(false);
+        }
+        return;
+      }
       try {
-        setLoading(true);
+        if (active) {
+          setLoading(true);
+        }
         const data = await listPosts({
           role,
           userId,
@@ -105,15 +126,24 @@ function PostListPage() {
           sourceTable: isBlogsView ? 'blogs' : 'posts',
           createdByStaffOnly: isAdminView,
         });
-        setPosts(data);
+        if (active) {
+          setPosts(data);
+        }
       } catch (error) {
-        toast.error(error.message);
+        if (active) {
+          toast.error(error.message);
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
     loadPosts();
-  }, [deferredSearch, isAdminView, isBlogsView, role, scopedCollegeId, status, userId]);
+    return () => {
+      active = false;
+    };
+  }, [authLoading, deferredSearch, isAdminView, isBlogsView, role, scopedCollegeId, status, userId]);
 
   return (
     <div className="stack-lg">

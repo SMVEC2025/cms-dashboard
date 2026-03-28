@@ -30,7 +30,12 @@ const POST_TYPE_LABELS = {
 };
 
 function DashboardPage() {
-  const { profile, user, selectedCollegeName } = useAuth();
+  const {
+    profile,
+    user,
+    selectedCollegeName,
+    loading: authLoading,
+  } = useAuth();
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const role = profile?.role;
@@ -38,26 +43,50 @@ function DashboardPage() {
   const userId = user?.id;
 
   useEffect(() => {
+    let active = true;
+
     const loadDashboard = async () => {
-      if (!role || !userId) return;
+      if (authLoading) {
+        return;
+      }
+
+      if (!role || !userId) {
+        if (active) {
+          setDashboard(null);
+          setLoading(false);
+        }
+        return;
+      }
 
       try {
-        setLoading(true);
+        if (active) {
+          setLoading(true);
+        }
         const data = await getDashboardData({
           role,
           userId,
           collegeId,
         });
-        setDashboard(data);
+        if (active) {
+          setDashboard(data);
+        }
       } catch (error) {
-        toast.error(error.message);
+        if (active) {
+          toast.error(error.message);
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
     loadDashboard();
-  }, [collegeId, role, userId]);
+
+    return () => {
+      active = false;
+    };
+  }, [authLoading, collegeId, role, userId]);
 
   const stats = dashboard?.stats || {
     totalPosts: 0,

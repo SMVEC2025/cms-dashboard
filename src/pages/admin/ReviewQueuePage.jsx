@@ -7,7 +7,7 @@ import CustomSelect from '@/components/ui/CustomSelect';
 import { useAuth } from '@/hooks/useAuth';
 import { POST_STATUS } from '@/lib/constants';
 import { formatDate, formatPostTypeLabel } from '@/lib/utils';
-import { listReviewQueue, updateReviewStatus } from '@/services/postsService';
+import { getPostById, listReviewQueue, updateReviewStatus } from '@/services/postsService';
 import PostPreview from '@/components/preview/PostPreview';
 
 const actionMap = [
@@ -24,21 +24,35 @@ const postTypeOptions = [
 ];
 
 function ReviewQueuePage() {
-  const { user, colleges, selectedCollegeName } = useAuth();
+  const {
+    user,
+    colleges,
+    selectedCollegeName,
+    loading: authLoading,
+  } = useAuth();
   const [searchParams] = useSearchParams();
   const [collegeFilter, setCollegeFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState(POST_STATUS.SUBMITTED);
+  const [statusFilter, setStatusFilter] = useState('');
   const [postTypeFilter, setPostTypeFilter] = useState('');
   const [queue, setQueue] = useState([]);
   const [activeId, setActiveId] = useState('');
+  const [activePostDetails, setActivePostDetails] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const [reviewNotes, setReviewNotes] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const requestedPostId = searchParams.get('postId');
 
-  const activePost = useMemo(() => queue.find((item) => item.id === activeId) || queue[0], [activeId, queue]);
+  const activeQueuePost = useMemo(
+    () => queue.find((item) => item.id === activeId) || queue[0] || null,
+    [activeId, queue],
+  );
 
   const loadQueue = useCallback(async () => {
+    if (authLoading) {
+      return;
+    }
+
     try {
       setLoading(true);
       const data = await listReviewQueue({
@@ -53,37 +67,86 @@ function ReviewQueuePage() {
       const nextActivePost = matchedPost || data[0];
 
       setActiveId(nextActivePost?.id || '');
+      setActivePostDetails(null);
       setReviewNotes(nextActivePost?.review_notes || '');
     } catch (error) {
       toast.error(error.message);
     } finally {
       setLoading(false);
     }
-  }, [collegeFilter, postTypeFilter, requestedPostId, statusFilter]);
+  }, [authLoading, collegeFilter, postTypeFilter, requestedPostId, statusFilter]);
 
   useEffect(() => {
     loadQueue();
   }, [loadQueue]);
 
   useEffect(() => {
-    setReviewNotes(activePost?.review_notes || '');
-  }, [activePost]);
+    setReviewNotes(activeQueuePost?.review_notes || '');
+  }, [activeQueuePost]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadActivePostDetails = async () => {
+      if (!activeQueuePost?.id) {
+        if (active) {
+          setActivePostDetails(null);
+          setDetailsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) {
+          setDetailsLoading(true);
+        }
+        const fullPost = await getPostById(activeQueuePost.id, {
+          sourceTable: activeQueuePost.source_table,
+        });
+        if (active) {
+          setActivePostDetails(fullPost);
+        }
+      } catch (error) {
+        if (active) {
+          toast.error(error.message);
+          setActivePostDetails(null);
+        }
+      } finally {
+        if (active) {
+          setDetailsLoading(false);
+        }
+      }
+    };
+
+    loadActivePostDetails();
+
+    return () => {
+      active = false;
+    };
+  }, [activeQueuePost?.id, activeQueuePost?.source_table]);
 
   const handleAction = async (status) => {
-    if (!activePost) {
+    if (!activeQueuePost) {
       return;
     }
 
     try {
       setSaving(true);
       await updateReviewStatus({
-        postId: activePost.id,
+        postId: activeQueuePost.id,
         reviewerId: user.id,
         status,
         reviewNotes,
-        sourceTable: activePost.source_table,
+        sourceTable: activeQueuePost.source_table,
       });
       toast.success(`Post updated: ${status.replace('_', ' ')}.`);
+
+      if (status === POST_STATUS.APPROVED && statusFilter === POST_STATUS.SUBMITTED) {
+        // Keep approved item visible so admin can publish in the next step.
+        setStatusFilter('');
+        return;
+      }
+
       await loadQueue();
     } catch (error) {
       toast.error(error.message);
@@ -143,7 +206,7 @@ function ReviewQueuePage() {
               <button
                 key={item.id}
                 type="button"
-                className={`review-list__item ${activePost?.id === item.id ? 'is-active' : ''}`}
+                className={`review-list__item ${activeQueuePost?.id === item.id ? 'is-active' : ''}`}
                 onClick={() => setActiveId(item.id)}
               >
                 <div>
@@ -169,21 +232,28 @@ function ReviewQueuePage() {
       </section>
 
       <section className="panel panel--preview">
-        {activePost ? (
+        {activeQueuePost ? (
           <>
             <div className="panel__header">
-              <h3 className="panel__title">{activePost.title}</h3>
-              <StatusBadge status={activePost.status} />
+              <h3 className="panel__title">{activeQueuePost.title}</h3>
+              <StatusBadge status={activeQueuePost.status} />
             </div>
 
-            <PostPreview
-              post={{
-                ...activePost,
-                tags: activePost.tags || [],
-                content_html: activePost.content_html || '',
-              }}
-              selectedCollegeName={activePost.college_name || selectedCollegeName}
-            />
+            {detailsLoading ? (
+              <div className="panel__body">
+                <p className="muted">Loading selected content...</p>
+              </div>
+            ) : (
+              <PostPreview
+                post={{
+                  ...activeQueuePost,
+                  ...(activePostDetails || {}),
+                  tags: activePostDetails?.tags || activeQueuePost.tags || [],
+                  content_html: activePostDetails?.content_html || '',
+                }}
+                selectedCollegeName={activeQueuePost.college_name || selectedCollegeName}
+              />
+            )}
 
             <div className="review-actions">
               <label>

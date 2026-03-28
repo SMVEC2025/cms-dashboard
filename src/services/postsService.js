@@ -3,6 +3,38 @@ import { requireSupabase } from '@/lib/supabase';
 import { logAuditEvent } from './auditService';
 
 const CONTENT_TABLES = ['posts', 'blogs'];
+const POST_OVERVIEW_LIST_COLUMNS = [
+  'id',
+  'source_table',
+  'college_id',
+  'college_name',
+  'author_id',
+  'author_name',
+  'reviewer_id',
+  'reviewer_name',
+  'post_type',
+  'status',
+  'title',
+  'slug',
+  'featured_image_url',
+  'event_date',
+  'event_time',
+  'location',
+  'venue',
+  'category',
+  'tags',
+  'review_notes',
+  'submitted_at',
+  'reviewed_at',
+  'published_at',
+  'created_at',
+  'updated_at',
+].join(',');
+const STAFF_IDS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let staffIdsCache = null;
+let staffIdsCacheAt = 0;
+let staffIdsRequest = null;
 
 function applyPostScope(query, { role, userId, collegeId }) {
   let scopedQuery = query;
@@ -24,6 +56,45 @@ function getSourceTableForPostType(postType) {
 
 function getEntityTypeForTable(sourceTable) {
   return sourceTable === 'blogs' ? 'blog' : 'post';
+}
+
+function shouldUseCachedStaffIds() {
+  if (!staffIdsCache?.length) {
+    return false;
+  }
+
+  return Date.now() - staffIdsCacheAt < STAFF_IDS_CACHE_TTL_MS;
+}
+
+async function getStaffIds(client) {
+  if (shouldUseCachedStaffIds()) {
+    return staffIdsCache;
+  }
+
+  if (staffIdsRequest) {
+    return staffIdsRequest;
+  }
+
+  staffIdsRequest = (async () => {
+    const { data: staffProfiles, error: staffError } = await client
+      .from('profiles')
+      .select('id')
+      .eq('role', ROLES.STAFF);
+
+    if (staffError) {
+      throw staffError;
+    }
+
+    staffIdsCache = (staffProfiles || []).map((profile) => profile.id);
+    staffIdsCacheAt = Date.now();
+    return staffIdsCache;
+  })();
+
+  try {
+    return await staffIdsRequest;
+  } finally {
+    staffIdsRequest = null;
+  }
 }
 
 function normalizeContentPayload(payload) {
@@ -88,7 +159,11 @@ async function countPosts({ role, userId, collegeId, status }) {
 export async function getDashboardData({ role, userId, collegeId }) {
   const client = requireSupabase();
   const recentQuery = applyPostScope(
-    client.from('post_overview').select('*').order('updated_at', { ascending: false }).limit(6),
+    client
+      .from('post_overview')
+      .select(POST_OVERVIEW_LIST_COLUMNS)
+      .order('updated_at', { ascending: false })
+      .limit(6),
     { role, userId, collegeId },
   );
   let reviewQueueQuery = null;
@@ -96,7 +171,7 @@ export async function getDashboardData({ role, userId, collegeId }) {
   if (role === ROLES.ADMIN) {
     reviewQueueQuery = client
       .from('post_overview')
-      .select('*')
+      .select(POST_OVERVIEW_LIST_COLUMNS)
       .eq('status', POST_STATUS.SUBMITTED)
       .in('post_type', ['event', 'blog'])
       .order('submitted_at', { ascending: false, nullsFirst: false });
@@ -150,21 +225,15 @@ export async function listPosts({
 }) {
   const client = requireSupabase();
   let query = applyPostScope(
-    client.from('post_overview').select('*').order('updated_at', { ascending: false }),
+    client
+      .from('post_overview')
+      .select(POST_OVERVIEW_LIST_COLUMNS)
+      .order('updated_at', { ascending: false }),
     { role, userId, collegeId },
   );
 
   if (createdByStaffOnly && role === ROLES.ADMIN) {
-    const { data: staffProfiles, error: staffError } = await client
-      .from('profiles')
-      .select('id')
-      .eq('role', ROLES.STAFF);
-
-    if (staffError) {
-      throw staffError;
-    }
-
-    const staffIds = (staffProfiles || []).map((profile) => profile.id);
+    const staffIds = await getStaffIds(client);
     if (!staffIds.length) {
       return [];
     }
@@ -338,7 +407,7 @@ export async function listReviewQueue({ collegeId, status, postType, sourceTable
   const client = requireSupabase();
   let query = client
     .from('post_overview')
-    .select('*')
+    .select(POST_OVERVIEW_LIST_COLUMNS)
     .in('status', [POST_STATUS.SUBMITTED, POST_STATUS.REVISION, POST_STATUS.APPROVED])
     .order('submitted_at', { ascending: false, nullsFirst: false });
 
