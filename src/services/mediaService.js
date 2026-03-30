@@ -1,6 +1,8 @@
 import { requireSupabase } from '@/lib/supabase';
 
 const mediaFunctionName = import.meta.env.VITE_SUPABASE_MEDIA_FUNCTION || 'r2-upload';
+const mediaProvider = (import.meta.env.VITE_MEDIA_PROVIDER || 'r2').trim().toLowerCase();
+const r2SignFunctionName = (import.meta.env.VITE_SUPABASE_R2_SIGN_FUNCTION || 'r2-sign-upload').trim();
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const IMAGE_MIME_PREFIX = 'image/';
 const FORCE_WEBP_MIN_BYTES = 1024 * 1024;
@@ -34,6 +36,10 @@ function isAbsoluteUrl(value) {
 
 function shouldProcessImage(file) {
   return Boolean(file?.type?.startsWith(IMAGE_MIME_PREFIX));
+}
+
+function isR2DirectUploadEnabled() {
+  return mediaProvider === 'r2-direct';
 }
 
 function buildWebpFileName(name = 'image') {
@@ -159,6 +165,21 @@ async function uploadToAbsoluteUrl(url, formData, headers = {}) {
   return payload;
 }
 
+async function uploadToSignedUrl(url, file, contentType) {
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': contentType || 'application/octet-stream',
+    },
+    body: file,
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(body || `Direct R2 upload failed with status ${response.status}.`);
+  }
+}
+
 async function getCachedUploadSession(client) {
   const now = Date.now();
   if (cachedSession && now - cachedSessionFetchedAt < SESSION_CACHE_TTL_MS) {
@@ -238,6 +259,7 @@ async function ensureMediaAssetMetadata({ client, session, payload, folder, file
     folder_id: folderId || null,
     metadata: {
       source: 'browser-media-metadata-fallback',
+      ...(payload?.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
     },
   };
 
@@ -294,12 +316,53 @@ export async function uploadMedia({
 }) {
   const compressionPreset = resolveCompressionPreset(folder, compressionProfile);
   const uploadFile = await compressImageFileByPreset(file, compressionPreset);
+  const client = requireSupabase();
+  const session = await getCachedUploadSession(client);
+
+  if (isR2DirectUploadEnabled()) {
+    const { data: signedPayload, error: signError } = await client.functions.invoke(r2SignFunctionName, {
+      body: {
+        folder,
+        fileName: uploadFile.name,
+        fileType: uploadFile.type,
+        fileSize: uploadFile.size,
+      },
+    });
+
+    if (signError) {
+      throw new Error(await extractFunctionError(signError));
+    }
+
+    if (!signedPayload?.signedUrl || !signedPayload?.publicUrl || !signedPayload?.key) {
+      throw new Error('R2 direct upload signing response is incomplete.');
+    }
+
+    await uploadToSignedUrl(signedPayload.signedUrl, uploadFile, uploadFile.type);
+
+    return ensureMediaAssetMetadata({
+      client,
+      session,
+      payload: {
+        provider: 'cloudflare-r2',
+        key: signedPayload.key,
+        publicUrl: signedPayload.publicUrl,
+        fileName: signedPayload.fileName || uploadFile.name,
+        mimeType: signedPayload.mimeType || uploadFile.type || 'application/octet-stream',
+        sizeBytes: uploadFile.size,
+        context: folder,
+        metadata: {
+          source: 'r2-direct-client-upload',
+        },
+      },
+      folder,
+      file: uploadFile,
+      folderId,
+    });
+  }
+
   const formData = new FormData();
   formData.append('file', uploadFile);
   formData.append('folder', folder);
-
-  const client = requireSupabase();
-  const session = await getCachedUploadSession(client);
 
   const authHeaders = {
     ...(supabaseAnonKey ? { apikey: supabaseAnonKey } : {}),

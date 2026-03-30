@@ -60,6 +60,8 @@ Copy-Item .env.example .env
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_APP_NAME`
 - `VITE_SUPABASE_MEDIA_FUNCTION` set to `r2-upload`
+- `VITE_MEDIA_PROVIDER` set to `r2` (use `r2-direct` for direct browser-to-R2 uploads)
+- `VITE_SUPABASE_R2_SIGN_FUNCTION` set to `r2-sign-upload` (only for `r2-direct`)
 
 4. Create a Supabase project.
 
@@ -94,6 +96,17 @@ All other users can stay as `staff`.
 ```bash
 supabase functions deploy r2-upload
 ```
+
+Optional for faster direct uploads (client -> R2):
+
+```bash
+supabase functions deploy r2-sign-upload
+```
+
+Then set:
+
+- `VITE_MEDIA_PROVIDER=r2-direct`
+- `VITE_SUPABASE_R2_SIGN_FUNCTION=r2-sign-upload`
 
 11. Start the app:
 
