@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { FiCheck, FiImage, FiSearch, FiUpload, FiX } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import { formatDate } from '@/lib/utils';
+import { startUploadStatusToast } from '@/lib/uploadStatusToast';
 import { listMediaAssets, uploadMedia } from '@/services/mediaService';
 
 const SOURCE_TABS = [
@@ -127,7 +128,7 @@ function EditorImagePicker({
 
   const processUpload = async (file) => {
     if (!file || uploadLockRef.current) return;
-    const toastId = toast.loading(`Uploading ${file.name}...`);
+    const uploadStatus = startUploadStatusToast();
 
     try {
       uploadLockRef.current = true;
@@ -144,9 +145,9 @@ function EditorImagePicker({
       });
       setActiveTab('uploads');
       setSelectedAssetId(mapped.id);
-      toast.success('Image uploaded.', { id: toastId });
+      uploadStatus.success('Image uploaded.');
     } catch (error) {
-      toast.error(error.message, { id: toastId });
+      uploadStatus.error(error.message);
     } finally {
       uploadLockRef.current = false;
       setUploading(false);

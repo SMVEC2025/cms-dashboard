@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { listMediaAssets, uploadMedia } from '@/services/mediaService';
+import { startUploadStatusToast } from '@/lib/uploadStatusToast';
 import { formatDate } from '@/lib/utils';
 
 function formatFileSize(bytes) {
@@ -58,41 +59,38 @@ function UploadsPage() {
     const fileList = Array.from(event.target.files || []);
     if (!fileList.length) return;
 
-    const toastId = toast.loading(
-      fileList.length === 1 ? `Uploading ${fileList[0].name}...` : `Uploading 1 of ${fileList.length} files...`,
-    );
+    const uploadStatus = startUploadStatusToast();
 
     try {
       setUploading(true);
+      const concurrency = 3;
       const results = [];
 
-      for (const [index, file] of fileList.entries()) {
-        toast.loading(
-          fileList.length === 1
-            ? `Uploading ${file.name}...`
-            : `Uploading ${index + 1} of ${fileList.length}: ${file.name}`,
-          { id: toastId },
+      for (let batchStart = 0; batchStart < fileList.length; batchStart += concurrency) {
+        const batch = fileList.slice(batchStart, batchStart + concurrency);
+
+        const batchResults = await Promise.all(
+          batch.map(async (file) => {
+            const asset = await uploadMedia({ file, folder: 'uploads' });
+            return {
+              id: asset.id || crypto.randomUUID(),
+              url: asset.publicUrl,
+              name: asset.fileName || file.name,
+              size: asset.sizeBytes || file.size,
+              type: asset.mimeType || file.type,
+              uploadedAt: asset.createdAt || new Date().toISOString(),
+              context: asset.context || 'uploads',
+            };
+          }),
         );
 
-        const asset = await uploadMedia({ file, folder: 'uploads' });
-        results.push({
-          id: asset.id || crypto.randomUUID(),
-          url: asset.publicUrl,
-          name: asset.fileName || file.name,
-          size: asset.sizeBytes || file.size,
-          type: asset.mimeType || file.type,
-          uploadedAt: asset.createdAt || new Date().toISOString(),
-          context: asset.context || 'uploads',
-        });
+        results.push(...batchResults);
       }
 
       setFiles((prev) => [...results, ...prev]);
-      toast.success(
-        results.length === 1 ? 'File uploaded.' : `${results.length} files uploaded.`,
-        { id: toastId },
-      );
+      uploadStatus.success(results.length === 1 ? 'File uploaded.' : `${results.length} files uploaded.`);
     } catch (error) {
-      toast.error(error.message, { id: toastId });
+      uploadStatus.error(error.message);
     } finally {
       setUploading(false);
       event.target.value = '';

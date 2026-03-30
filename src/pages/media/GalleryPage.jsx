@@ -14,6 +14,7 @@ import {
   FiUpload,
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
+import { startUploadStatusToast } from '@/lib/uploadStatusToast';
 import {
   listMediaAssets,
   uploadMedia,
@@ -164,35 +165,37 @@ function GalleryPage() {
   const handleUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    const toastId = toast.loading(
-      files.length === 1 ? `Uploading ${files[0].name}...` : `Uploading 1 of ${files.length} files...`,
-    );
+    const uploadStatus = startUploadStatusToast();
 
     try {
       setUploading(true);
+      const concurrency = 3;
       const results = [];
-      for (const [index, file] of files.entries()) {
-        toast.loading(
-          files.length === 1
-            ? `Uploading ${file.name}...`
-            : `Uploading ${index + 1} of ${files.length}: ${file.name}`,
-          { id: toastId },
+
+      for (let batchStart = 0; batchStart < files.length; batchStart += concurrency) {
+        const batch = files.slice(batchStart, batchStart + concurrency);
+
+        const batchResults = await Promise.all(
+          batch.map(async (file) => {
+            const asset = await uploadMedia({ file, folder: 'gallery', folderId: currentFolderId });
+            return {
+              id: asset.id || crypto.randomUUID(),
+              url: asset.publicUrl,
+              name: asset.fileName || file.name,
+              size: asset.sizeBytes || file.size,
+              type: asset.mimeType || file.type,
+              uploadedAt: asset.createdAt || new Date().toISOString(),
+              folderId: asset.folderId || currentFolderId,
+            };
+          }),
         );
-        const asset = await uploadMedia({ file, folder: 'gallery', folderId: currentFolderId });
-        results.push({
-          id: asset.id || crypto.randomUUID(),
-          url: asset.publicUrl,
-          name: asset.fileName || file.name,
-          size: asset.sizeBytes || file.size,
-          type: asset.mimeType || file.type,
-          uploadedAt: asset.createdAt || new Date().toISOString(),
-          folderId: asset.folderId || currentFolderId,
-        });
+
+        results.push(...batchResults);
       }
       setAssets((prev) => [...results, ...prev]);
-      toast.success(results.length === 1 ? 'File uploaded.' : `${results.length} files uploaded.`, { id: toastId });
+      uploadStatus.success(results.length === 1 ? 'File uploaded.' : `${results.length} files uploaded.`);
     } catch (err) {
-      toast.error(err.message, { id: toastId });
+      uploadStatus.error(err.message);
     } finally {
       setUploading(false);
       e.target.value = '';

@@ -5,20 +5,23 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const IMAGE_MIME_PREFIX = 'image/';
 const IMAGE_PROCESSING_PRESETS = {
   default: {
-    maxDimension: 1920,
-    quality: 0.82,
-    skipBelowBytes: 0,
+    maxDimension: 1600,
+    quality: 0.78,
+    skipBelowBytes: 300 * 1024,
     minSavingsRatio: 0.05,
   },
   fast: {
-    maxDimension: 1440,
-    quality: 0.74,
+    maxDimension: 1280,
+    quality: 0.7,
     skipBelowBytes: 350 * 1024,
     minSavingsRatio: 0.02,
   },
 };
 const FOLDER_COMPRESSION_PRESET = {
   'editor-media': 'fast',
+  'featured-images': 'fast',
+  gallery: 'fast',
+  uploads: 'fast',
 };
 
 function isAbsoluteUrl(value) {
@@ -53,6 +56,18 @@ function loadImageFromFile(file) {
   });
 }
 
+async function loadImageSource(file) {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      return await createImageBitmap(file);
+    } catch {
+      return loadImageFromFile(file);
+    }
+  }
+
+  return loadImageFromFile(file);
+}
+
 function resolveCompressionPreset(folder, requestedPreset) {
   if (requestedPreset && IMAGE_PROCESSING_PRESETS[requestedPreset]) {
     return IMAGE_PROCESSING_PRESETS[requestedPreset];
@@ -76,7 +91,7 @@ async function compressImageFileByPreset(file, preset) {
       return file;
     }
 
-    const image = await loadImageFromFile(file);
+    const image = await loadImageSource(file);
     const scale = Math.min(1, preset.maxDimension / Math.max(image.width, image.height));
     const targetWidth = Math.max(1, Math.round(image.width * scale));
     const targetHeight = Math.max(1, Math.round(image.height * scale));
@@ -101,7 +116,14 @@ async function compressImageFileByPreset(file, preset) {
     }
 
     if (!resized && blob.size >= file.size * (1 - preset.minSavingsRatio)) {
+      if (typeof image.close === 'function') {
+        image.close();
+      }
       return file;
+    }
+
+    if (typeof image.close === 'function') {
+      image.close();
     }
 
     return new File([blob], buildWebpFileName(file.name), {
