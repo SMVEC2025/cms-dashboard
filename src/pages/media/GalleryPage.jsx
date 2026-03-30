@@ -26,6 +26,8 @@ import {
 } from '@/services/mediaService';
 import { formatDate } from '@/lib/utils';
 
+const SMALL_FILE_BYTES = 1024 * 1024;
+
 /* ── helpers ── */
 function buildTree(flat) {
   const map = {};
@@ -169,7 +171,8 @@ function GalleryPage() {
 
     try {
       setUploading(true);
-      const concurrency = 3;
+      const allSmallFiles = files.every((file) => file.size <= SMALL_FILE_BYTES);
+      const concurrency = allSmallFiles ? 6 : 3;
       const results = [];
 
       for (let batchStart = 0; batchStart < files.length; batchStart += concurrency) {

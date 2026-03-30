@@ -3,6 +3,8 @@ import { requireSupabase } from '@/lib/supabase';
 const mediaFunctionName = import.meta.env.VITE_SUPABASE_MEDIA_FUNCTION || 'r2-upload';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const IMAGE_MIME_PREFIX = 'image/';
+const FORCE_WEBP_MIN_BYTES = 1024 * 1024;
+const SESSION_CACHE_TTL_MS = 30 * 1000;
 const IMAGE_PROCESSING_PRESETS = {
   default: {
     maxDimension: 1600,
@@ -23,6 +25,8 @@ const FOLDER_COMPRESSION_PRESET = {
   gallery: 'fast',
   uploads: 'fast',
 };
+let cachedSession = null;
+let cachedSessionFetchedAt = 0;
 
 function isAbsoluteUrl(value) {
   return /^https?:\/\//i.test(value || '');
@@ -87,6 +91,10 @@ async function compressImageFileByPreset(file, preset) {
   }
 
   try {
+    if (file.size <= FORCE_WEBP_MIN_BYTES) {
+      return file;
+    }
+
     if (file.size <= preset.skipBelowBytes) {
       return file;
     }
@@ -149,6 +157,21 @@ async function uploadToAbsoluteUrl(url, formData, headers = {}) {
   }
 
   return payload;
+}
+
+async function getCachedUploadSession(client) {
+  const now = Date.now();
+  if (cachedSession && now - cachedSessionFetchedAt < SESSION_CACHE_TTL_MS) {
+    return cachedSession;
+  }
+
+  const {
+    data: { session },
+  } = await client.auth.getSession();
+
+  cachedSession = session || null;
+  cachedSessionFetchedAt = now;
+  return cachedSession;
 }
 
 async function extractFunctionError(error) {
@@ -276,9 +299,7 @@ export async function uploadMedia({
   formData.append('folder', folder);
 
   const client = requireSupabase();
-  const {
-    data: { session },
-  } = await client.auth.getSession();
+  const session = await getCachedUploadSession(client);
 
   const authHeaders = {
     ...(supabaseAnonKey ? { apikey: supabaseAnonKey } : {}),

@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 const DEFAULT_MESSAGES = [
   'Uploading image...',
   'It takes a bit long...',
-  'Conerting images...',
+  'Converting images...',
 ];
 
 export function startUploadStatusToast(messages = DEFAULT_MESSAGES, intervalMs = 1400) {
@@ -30,4 +30,3 @@ export function startUploadStatusToast(messages = DEFAULT_MESSAGES, intervalMs =
     },
   };
 }
-

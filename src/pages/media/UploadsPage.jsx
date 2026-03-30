@@ -4,6 +4,8 @@ import { listMediaAssets, uploadMedia } from '@/services/mediaService';
 import { startUploadStatusToast } from '@/lib/uploadStatusToast';
 import { formatDate } from '@/lib/utils';
 
+const SMALL_FILE_BYTES = 1024 * 1024;
+
 function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -63,7 +65,8 @@ function UploadsPage() {
 
     try {
       setUploading(true);
-      const concurrency = 3;
+      const allSmallFiles = fileList.every((file) => file.size <= SMALL_FILE_BYTES);
+      const concurrency = allSmallFiles ? 6 : 3;
       const results = [];
 
       for (let batchStart = 0; batchStart < fileList.length; batchStart += concurrency) {
