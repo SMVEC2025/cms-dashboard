@@ -101,10 +101,10 @@ function DashboardPage() {
   const dashboardItems = isAdminDashboard ? reviewQueue : recentPosts;
   const adminSubmittedItems = reviewQueue.filter((post) => post.status === POST_STATUS.SUBMITTED);
   const activityItems = isAdminDashboard ? adminSubmittedItems : dashboardItems.slice(0, 4);
-  const featuredRecentPosts = recentPosts.slice(0, 3);
 
   // Derive event analytics from recent posts
   const eventPosts = recentPosts.filter((p) => p.post_type === 'event');
+  const featuredEventPosts = eventPosts.slice(0, 12);
   const newsPosts = recentPosts.filter((p) => p.post_type === 'news');
   const blogPosts = recentPosts.filter((p) => p.post_type === 'blog');
   const maxTypeCount = Math.max(eventPosts.length, newsPosts.length, blogPosts.length, 1);
@@ -128,7 +128,7 @@ function DashboardPage() {
             ))}
           </div>
           <section className="dashboard-card">
-            <div className="story-grid">
+            <div className="story-grid story-grid--carousel">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="skeleton skeleton--story-card" />
               ))}
@@ -188,15 +188,15 @@ function DashboardPage() {
             <div className="dashboard-card__header">
               <div>
                 <span className="dashboard-card__eyebrow">Recent content</span>
-                <h3>Latest stories in motion</h3>
+                <h3>Latest events in motion</h3>
               </div>
               <Link to="/posts" className="dashboard-card__header-action">
                 View Library
               </Link>
             </div>
-            <div className="story-grid">
-              {featuredRecentPosts.length > 0 ? (
-                featuredRecentPosts.map((post) => (
+            <div className="story-grid story-grid--carousel">
+              {featuredEventPosts.length > 0 ? (
+                featuredEventPosts.map((post) => (
                   <div className="story-card" key={post.id}>
                     <div className="story-card__thumb">
                       <img
@@ -273,10 +273,10 @@ function DashboardPage() {
                     </svg>
                   </div>
                   <span className="dashboard-empty__eyebrow">Ready to publish</span>
-                  <h4>No Post yet</h4>
+                  <h4>No Events yet</h4>
                   <p>
-                    Start with a post, event update, or blog article for {selectedCollegeName}.
-                    Once your first story is drafted, this workspace will begin surfacing your pipeline here.
+                    Publish an event update for {selectedCollegeName}.
+                    Once your first event is available, it will appear in this carousel.
                   </p>
                   <div className="dashboard-empty__actions">
                     <Link to="/posts/new" className="btn btn--dashed">
