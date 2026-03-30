@@ -462,7 +462,9 @@ function DashboardPage() {
             <div className="dash-workspace__item">
               <div className="dash-workspace__icon dash-workspace__icon--violet">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 20V10M18 20V4M6 20v-4" />
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="M9 22V12h6v10" />
+                  <path d="M9 7h.01M12 7h.01M15 7h.01M9 11h.01M15 11h.01" />
                 </svg>
               </div>
               <div className="dash-workspace__info">

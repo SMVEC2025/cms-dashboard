@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import CustomSelect from '@/components/ui/CustomSelect';
 import DatePickerField from '@/components/common/DatePickerField';
+import TimePickerField from '@/components/common/TimePickerField';
 import EditorImagePicker from '@/components/editor/EditorImagePicker';
 import RichTextEditor from '@/components/editor/RichTextEditor';
 import StatusBadge from '@/components/common/StatusBadge';
@@ -128,6 +129,7 @@ function PostEditorPage() {
     },
   });
   const eventDateField = register('event_date');
+  const eventTimeField = register('event_time');
   const watchedValues = watch();
   const selectedPostType = watchedValues.post_type || defaultValues.post_type;
   const selectedCategory = watchedValues.category || '';
@@ -157,6 +159,13 @@ function PostEditorPage() {
 
   const handleEventDateChange = (nextValue) => {
     setValue('event_date', nextValue, {
+      shouldDirty: true,
+      shouldTouch: true,
+    });
+  };
+
+  const handleEventTimeChange = (nextValue) => {
+    setValue('event_time', nextValue, {
       shouldDirty: true,
       shouldTouch: true,
     });
@@ -555,6 +564,7 @@ function PostEditorPage() {
         ariaLabel="Choose featured image"
       />
       <input type="hidden" {...eventDateField} />
+      <input type="hidden" {...eventTimeField} />
       <input
         ref={importInputRef}
         type="file"
@@ -822,7 +832,10 @@ function PostEditorPage() {
                       </label>
                       <label className="field-group">
                         <span>Event time</span>
-                        <input type="time" {...register('event_time')} />
+                        <TimePickerField
+                          value={watchedValues.event_time}
+                          onChange={handleEventTimeChange}
+                        />
                       </label>
                       <label className="field-group">
                         <span>Location</span>
@@ -886,7 +899,10 @@ function PostEditorPage() {
                     value={watchedValues.event_date}
                     onChange={handleEventDateChange}
                   />
-                  <input type="time" {...register('event_time')} />
+                  <TimePickerField
+                    value={watchedValues.event_time}
+                    onChange={handleEventTimeChange}
+                  />
                 </div>
               </div>
             )}

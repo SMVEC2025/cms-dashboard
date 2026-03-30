@@ -17,13 +17,17 @@ function parseDateValue(value) {
 function DatePickerField({
   value,
   onChange,
-  placeholder = 'dd-mm-yyyy',
+  placeholder = 'Select date',
   className,
   disabled = false,
 }) {
   const [open, setOpen] = useState(false);
 
   const selectedDate = useMemo(() => parseDateValue(value), [value]);
+  const formattedValue = selectedDate ? format(selectedDate, 'dd-MM-yyyy') : placeholder;
+  const buttonLabel = selectedDate
+    ? `Selected date ${format(selectedDate, 'dd MMMM yyyy')}. Change date`
+    : 'Choose date';
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -32,10 +36,11 @@ function DatePickerField({
           type="button"
           className={clsx('date-picker-field', !selectedDate && 'is-empty', className)}
           disabled={disabled}
-          aria-label="Pick a date"
+          aria-label={buttonLabel}
+          aria-haspopup="dialog"
         >
           <span className="date-picker-field__value">
-            {selectedDate ? format(selectedDate, 'dd-MM-yyyy') : placeholder}
+            {formattedValue}
           </span>
           <FiCalendar className="date-picker-field__icon" aria-hidden="true" />
         </button>
