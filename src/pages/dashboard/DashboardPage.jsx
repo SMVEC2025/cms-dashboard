@@ -1,11 +1,40 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import StatCard from '@/components/common/StatCard';
 import { useAuth } from '@/hooks/useAuth';
 import { getDashboardData } from '@/services/postsService';
 import { POST_STATUS, ROLES } from '@/lib/constants';
 import { formatDate, formatPostTypeLabel } from '@/lib/utils';
+import OnboardingTour from '@/components/onboarding/OnboardingTour';
+import { useOnboarding } from '@/hooks/useOnboarding';
+
+const DASHBOARD_TOUR = [
+  {
+    target: null,
+    icon: '👋',
+    title: 'Welcome to SMVEC CMS!',
+    content: "You're all set up. Let's take a quick tour so you can start publishing content with confidence.",
+  },
+  {
+    target: '[data-tour="stats"]',
+    icon: '📊',
+    title: 'Your Content at a Glance',
+    content: 'These four cards give you a live snapshot — total posts, what\'s published, items awaiting review, and drafts in progress.',
+  },
+  {
+    target: '.sidebar__create-btn',
+    icon: '✏️',
+    title: 'Create a New Post',
+    content: 'This button is always here in the sidebar. Click it any time to start writing a new event, news article, or blog post.',
+  },
+  {
+    target: '[data-tour="recent-content"]',
+    icon: '📋',
+    title: 'Your Recent Content',
+    content: 'Your latest events and posts show up here. Click "Edit Post" on any card to jump back in and keep working.',
+  },
+];
 
 const STATUS_LABELS = {
   published: 'Published',
@@ -38,9 +67,23 @@ function DashboardPage() {
   } = useAuth();
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [tourOpen, setTourOpen] = useState(false);
+  const tourCheckedRef = useRef(false);
   const role = profile?.role;
   const collegeId = profile?.selected_college_id;
   const userId = user?.id;
+  const { hasSeen, markSeen } = useOnboarding(userId);
+
+  // Show onboarding tour for staff users on first visit
+  useEffect(() => {
+    if (loading || authLoading || tourCheckedRef.current) return;
+    if (role === ROLES.ADMIN) return;
+    tourCheckedRef.current = true;
+    if (!hasSeen('dashboard')) {
+      const t = setTimeout(() => setTourOpen(true), 700);
+      return () => clearTimeout(t);
+    }
+  }, [loading, authLoading, role, hasSeen]);
 
   useEffect(() => {
     let active = true;
@@ -151,12 +194,19 @@ function DashboardPage() {
     );
   }
 
+  const handleTourFinish = () => {
+    markSeen('dashboard');
+    setTourOpen(false);
+  };
+
   return (
+    <>
+    <OnboardingTour steps={DASHBOARD_TOUR} isOpen={tourOpen} onFinish={handleTourFinish} />
     <div className="dashboard dashboard--two-col">
       {/* ── Left: Main content ── */}
       <div className={`dashboard__main${isAdminDashboard ? ' dashboard__main--admin' : ''}`}>
         {/* Stat pills */}
-        <section className="stats-grid">
+        <section className="stats-grid" data-tour="stats">
           <StatCard
             label="Total Posts"
             value={stats.totalPosts}
@@ -184,7 +234,7 @@ function DashboardPage() {
         </section>
 
         {!isAdminDashboard && (
-          <section className="dashboard-card">
+          <section className="dashboard-card" data-tour="recent-content">
             <div className="dashboard-card__header">
               <div>
                 <span className="dashboard-card__eyebrow">Recent content</span>
@@ -365,7 +415,7 @@ function DashboardPage() {
         </div>
 
         {/* Content Analytics */}
-        <div className="dash-sidebar-card">
+        <div className="dash-sidebar-card" data-tour="analytics">
           <div className="dash-sidebar-card__header">
             <h4>Content Analytics</h4>
           </div>
@@ -513,6 +563,7 @@ function DashboardPage() {
         </div>
       </aside>
     </div>
+    </>
   );
 }
 

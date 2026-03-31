@@ -81,6 +81,37 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const bootstrapCompleteRef = useRef(false);
 
+  const hydrateSessionContext = async (nextSession, { forceColleges = false } = {}) => {
+    setSession(nextSession);
+
+    if (!nextSession?.user) {
+      setProfile(null);
+      setColleges([]);
+      return null;
+    }
+
+    const {
+      profileData: rawProfileData,
+      collegesData,
+      collegesError,
+    } = await loadSessionContext(nextSession, { forceColleges });
+
+    if (collegesError) {
+      toast.error(collegesError.message || 'Failed to load colleges.');
+    }
+
+    const profileData = await ensureAdminDefaultCollege({
+      profile: rawProfileData,
+      colleges: collegesData,
+      userId: nextSession.user.id,
+    });
+
+    setProfile(profileData);
+    setColleges(collegesData);
+
+    return profileData;
+  };
+
   useEffect(() => {
     if (!isSupabaseConfigured) {
       setLoading(false);
@@ -101,31 +132,7 @@ export function AuthProvider({ children }) {
       try {
         const activeSession = await getSession();
         if (!mounted) return;
-
-        setSession(activeSession);
-
-        if (activeSession?.user) {
-          const {
-            profileData: rawProfileData,
-            collegesData,
-            collegesError,
-          } = await loadSessionContext(activeSession, { forceColleges: true });
-          if (collegesError && mounted) {
-            toast.error(collegesError.message || 'Failed to load colleges.');
-          }
-          const profileData = await ensureAdminDefaultCollege({
-            profile: rawProfileData,
-            colleges: collegesData,
-            userId: activeSession.user.id,
-          });
-          if (mounted) {
-            setProfile(profileData);
-            setColleges(collegesData);
-          }
-        } else if (mounted) {
-          setProfile(null);
-          setColleges([]);
-        }
+        await hydrateSessionContext(activeSession, { forceColleges: true });
       } catch (error) {
         if (mounted) {
           toast.error(error.message);
@@ -152,30 +159,10 @@ export function AuthProvider({ children }) {
       if (!bootstrapCompleteRef.current) return;
 
       try {
-        setSession(nextSession);
-
-        if (nextSession?.user) {
-          const {
-            profileData: rawProfileData,
-            collegesData,
-            collegesError,
-          } = await loadSessionContext(nextSession);
-          if (collegesError && mounted) {
-            toast.error(collegesError.message || 'Failed to load colleges.');
-          }
-          const profileData = await ensureAdminDefaultCollege({
-            profile: rawProfileData,
-            colleges: collegesData,
-            userId: nextSession.user.id,
-          });
-          if (mounted) {
-            setProfile(profileData);
-            setColleges(collegesData);
-          }
-        } else if (mounted) {
-          setProfile(null);
-          setColleges([]);
+        if (mounted) {
+          setLoading(true);
         }
+        await hydrateSessionContext(nextSession);
       } catch (error) {
         if (mounted) {
           toast.error(error.message);
@@ -206,24 +193,15 @@ export function AuthProvider({ children }) {
   };
 
   const handleSignIn = async (credentials) => {
-    const data = await signInWithPassword(credentials);
-    setSession(data.session);
-    const {
-      profileData: rawProfileData,
-      collegesData,
-      collegesError,
-    } = await loadSessionContext(data.session);
-    if (collegesError) {
-      toast.error(collegesError.message || 'Failed to load colleges.');
+    setLoading(true);
+
+    try {
+      const data = await signInWithPassword(credentials);
+      return await hydrateSessionContext(data.session);
+    } catch (error) {
+      setLoading(false);
+      throw error;
     }
-    const profileData = await ensureAdminDefaultCollege({
-      profile: rawProfileData,
-      colleges: collegesData,
-      userId: data.session.user.id,
-    });
-    setProfile(profileData);
-    setColleges(collegesData);
-    return profileData;
   };
 
   const handleSignOut = async () => {

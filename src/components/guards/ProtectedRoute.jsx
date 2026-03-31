@@ -4,7 +4,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 
 function ProtectedRoute({ children, requireCollege = false }) {
   const location = useLocation();
-  const { loading, isAuthenticated, requiresCollegeSelection } = useAuth();
+  const { loading, isAuthenticated, profile, requiresCollegeSelection } = useAuth();
 
   if (!isSupabaseConfigured) {
     return (
@@ -18,7 +18,7 @@ function ProtectedRoute({ children, requireCollege = false }) {
     );
   }
 
-  if (loading) {
+  if (loading || (isAuthenticated && !profile)) {
     return (
       <div className="app-loader">
         <div className="app-loader__spinner" />

@@ -2,9 +2,9 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 
 function PublicOnlyRoute({ children }) {
-  const { loading, isAuthenticated, requiresCollegeSelection } = useAuth();
+  const { loading, isAuthenticated, profile, requiresCollegeSelection } = useAuth();
 
-  if (loading) {
+  if (loading || (isAuthenticated && !profile)) {
     return (
       <div className="app-loader">
         <div className="app-loader__spinner" />
