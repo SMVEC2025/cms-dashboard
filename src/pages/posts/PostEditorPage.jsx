@@ -54,7 +54,7 @@ function limitToWordCount(value, maxWords) {
   return words.slice(0, maxWords).join(' ');
 }
 
-function buildSnapshot(fields, contentHtml) {
+function buildSnapshot(fields, contentHtml, collegeId = '') {
   return JSON.stringify({
     title: fields.title || '',
     slug: fields.slug || '',
@@ -68,6 +68,7 @@ function buildSnapshot(fields, contentHtml) {
     seo_title: fields.seo_title || '',
     seo_description: fields.seo_description || '',
     content: contentHtml || '',
+    college_id: collegeId || '',
   });
 }
 
@@ -75,7 +76,14 @@ function PostEditorPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { postId } = useParams();
-  const { profile, user, selectedCollegeName } = useAuth();
+  const {
+    profile,
+    user,
+    selectedCollegeName,
+    selectedCollegeId,
+    colleges,
+    getCollegeNameById,
+  } = useAuth();
   const isBlogRoute = location.pathname.startsWith('/blogs');
   const isNewPostRoute = !postId && !isBlogRoute;
   const isAdmin = profile?.role === ROLES.ADMIN;
@@ -96,6 +104,7 @@ function PostEditorPage() {
   const [isCustomCategorySelected, setIsCustomCategorySelected] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [isReadOnlyMode, setIsReadOnlyMode] = useState(false);
+  const [targetCollegeId, setTargetCollegeId] = useState('');
   const submittedSnapshotRef = useRef(null);
 
   const {
@@ -128,13 +137,29 @@ function PostEditorPage() {
       return true;
     },
   });
-  const eventDateField = register('event_date');
-  const eventTimeField = register('event_time');
   const watchedValues = watch();
   const selectedPostType = watchedValues.post_type || defaultValues.post_type;
   const selectedCategory = watchedValues.category || '';
   const isEventPost = selectedPostType === 'event';
   const isBlogPost = selectedPostType === 'blog';
+  const eventDateField = register('event_date', {
+    validate: (value) => {
+      if (!isEventPost) {
+        return true;
+      }
+
+      return value ? true : 'Event date is required.';
+    },
+  });
+  const eventTimeField = register('event_time', {
+    validate: (value) => {
+      if (!isEventPost) {
+        return true;
+      }
+
+      return value ? true : 'Event time is required.';
+    },
+  });
   const hasPresetCategory = CATEGORY_OPTIONS.includes(selectedCategory);
   const showCustomCategoryInput = isCustomCategorySelected || Boolean(selectedCategory && !hasPresetCategory);
   const editorPostTypeOptions = isBlogRoute
@@ -150,7 +175,13 @@ function PostEditorPage() {
     ? existingPost.author_name
       || (existingPost.author_id === user?.id ? currentUserName : 'Staff')
     : currentUserName;
-  const collegeDisplayName = existingPost?.college_name || selectedCollegeName;
+  const collegeDisplayName = existingPost?.college_name
+    || getCollegeNameById(targetCollegeId)
+    || selectedCollegeName;
+  const collegeOptions = colleges.map((college) => ({
+    value: college.id,
+    label: college.name,
+  }));
 
   const navigateToEditor = (savedPost) => {
     const editBase = savedPost.post_type === 'blog' ? '/blogs' : '/posts';
@@ -161,6 +192,7 @@ function PostEditorPage() {
     setValue('event_date', nextValue, {
       shouldDirty: true,
       shouldTouch: true,
+      shouldValidate: true,
     });
   };
 
@@ -168,6 +200,7 @@ function PostEditorPage() {
     setValue('event_time', nextValue, {
       shouldDirty: true,
       shouldTouch: true,
+      shouldValidate: true,
     });
   };
 
@@ -229,7 +262,7 @@ function PostEditorPage() {
             tags: tagsToInput(post.tags),
             seo_title: post.seo_title || '',
             seo_description: post.seo_description || '',
-          }, post.content_html || '');
+          }, post.content_html || '', post.college_id || '');
         }
       } catch (error) {
         toast.error(error.message);
@@ -276,12 +309,34 @@ function PostEditorPage() {
 
   useEffect(() => {
     if (!isLocked || !submittedSnapshotRef.current) return;
-    const current = buildSnapshot(watchedValues, contentState.html);
+    const current = buildSnapshot(watchedValues, contentState.html, targetCollegeId);
     if (current !== submittedSnapshotRef.current) {
       setIsLocked(false);
       submittedSnapshotRef.current = null;
     }
-  }, [watchedValues, contentState, isLocked]);
+  }, [watchedValues, contentState, isLocked, targetCollegeId]);
+
+  useEffect(() => {
+    if (existingPost?.college_id) {
+      setTargetCollegeId(existingPost.college_id);
+      return;
+    }
+
+    if (targetCollegeId) {
+      return;
+    }
+
+    const fallbackCollegeId = selectedCollegeId || profile?.selected_college_id || colleges[0]?.id || '';
+    if (fallbackCollegeId) {
+      setTargetCollegeId(fallbackCollegeId);
+    }
+  }, [
+    colleges,
+    existingPost?.college_id,
+    profile?.selected_college_id,
+    selectedCollegeId,
+    targetCollegeId,
+  ]);
 
   const uploadFeaturedAsset = async (file) => {
     if (!file) return;
@@ -373,7 +428,7 @@ function PostEditorPage() {
       ...watchedValues,
       tags: parseTagInput(watchedValues.tags),
       content_html: contentState.html,
-      collegeName: selectedCollegeName,
+      collegeName: getCollegeNameById(targetCollegeId) || selectedCollegeName,
     };
     sessionStorage.setItem('cms-preview', JSON.stringify(previewData));
     window.open('/preview', '_blank');
@@ -441,6 +496,14 @@ function PostEditorPage() {
       toast.error('Add the main content before saving.');
       return;
     }
+    const resolvedCollegeId = isAdmin
+      ? (targetCollegeId || existingPost?.college_id || profile?.selected_college_id || null)
+      : (existingPost?.college_id || profile?.selected_college_id || null);
+
+    if (!resolvedCollegeId) {
+      toast.error('Select a college before saving this post.');
+      return;
+    }
 
     const shouldAssignAdminAsAuthor = Boolean(postId && isAdmin && existingPost?.id);
     const shouldDirectPublish = Boolean(mode === 'submit' && isAdmin);
@@ -448,7 +511,7 @@ function PostEditorPage() {
     const payload = {
       id: postId,
       author_id: shouldAssignAdminAsAuthor ? user.id : (existingPost?.author_id || user.id),
-      college_id: existingPost?.college_id || profile.selected_college_id,
+      college_id: resolvedCollegeId,
       post_type: values.post_type,
       title: values.title,
       slug: values.slug,
@@ -479,7 +542,7 @@ function PostEditorPage() {
           savedPost.author_id === user.id
             ? currentUserName
             : previousPost?.author_name || savedPost.author_name || null,
-        college_name: previousPost?.college_name || savedPost.college_name || null,
+        college_name: savedPost.college_name || getCollegeNameById(savedPost.college_id) || null,
       }));
       const contentLabel = formatPostTypeLabel(savedPost.post_type || values.post_type);
       toast.success(
@@ -495,7 +558,7 @@ function PostEditorPage() {
           submittedSnapshotRef.current = null;
         } else {
           setIsLocked(true);
-          submittedSnapshotRef.current = buildSnapshot(values, contentState.html);
+          submittedSnapshotRef.current = buildSnapshot(values, contentState.html, resolvedCollegeId);
         }
       }
       if (!postId) {
@@ -824,18 +887,24 @@ function PostEditorPage() {
                   {isEventPost ? (
                     <>
                       <label className="field-group">
-                        <span>Event date</span>
+                        <span>Event date*</span>
                         <DatePickerField
                           value={watchedValues.event_date}
                           onChange={handleEventDateChange}
                         />
+                        {errors.event_date && (
+                          <small className="field-error">{errors.event_date.message}</small>
+                        )}
                       </label>
                       <label className="field-group">
-                        <span>Event time</span>
+                        <span>Event time*</span>
                         <TimePickerField
                           value={watchedValues.event_time}
                           onChange={handleEventTimeChange}
                         />
+                        {errors.event_time && (
+                          <small className="field-error">{errors.event_time.message}</small>
+                        )}
                       </label>
                       <label className="field-group">
                         <span>Location</span>
@@ -893,7 +962,7 @@ function PostEditorPage() {
 
             {isEventPost && (
               <div className="cms-sidebar-section">
-                <span className="cms-sidebar-section__label">Event schedule</span>
+                <span className="cms-sidebar-section__label">Event schedule*</span>
                 <div className="cms-sidebar-section__row">
                   <DatePickerField
                     value={watchedValues.event_date}
@@ -904,6 +973,11 @@ function PostEditorPage() {
                     onChange={handleEventTimeChange}
                   />
                 </div>
+                {(errors.event_date || errors.event_time) && (
+                  <small className="field-error">
+                    {errors.event_date?.message || errors.event_time?.message}
+                  </small>
+                )}
               </div>
             )}
 
@@ -993,7 +1067,19 @@ function PostEditorPage() {
 
             <div className="cms-sidebar-section">
               <span className="cms-sidebar-section__label">College</span>
-              <span className="cms-sidebar-college">{collegeDisplayName}</span>
+              {isAdmin ? (
+                <>
+                  <CustomSelect
+                    value={targetCollegeId}
+                    onChange={setTargetCollegeId}
+                    options={collegeOptions}
+                    placeholder="Select college"
+                    disabled={isReadOnlyMode}
+                  />
+                </>
+              ) : (
+                <span className="cms-sidebar-college">{collegeDisplayName}</span>
+              )}
             </div>
 
             {isBlogPost && (
