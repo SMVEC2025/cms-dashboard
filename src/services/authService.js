@@ -29,6 +29,28 @@ export async function signInWithPassword({ email, password }) {
   return data;
 }
 
+export async function updateUserMetadata(data) {
+  const client = requireSupabase();
+  const { data: result, error } = await client.auth.updateUser({ data });
+
+  if (error) {
+    throw error;
+  }
+
+  return result.user;
+}
+
+export async function updateUserPassword(password) {
+  const client = requireSupabase();
+  const { data, error } = await client.auth.updateUser({ password });
+
+  if (error) {
+    throw error;
+  }
+
+  return data.user;
+}
+
 export async function signOut() {
   if (signOutPromise) {
     return signOutPromise;

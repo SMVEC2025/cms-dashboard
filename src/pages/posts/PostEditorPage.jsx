@@ -19,41 +19,7 @@ import {
   updatePostFeaturedImage,
 } from '@/services/postsService';
 import { IoMdClose } from "react-icons/io";
-import OnboardingTour from '@/components/onboarding/OnboardingTour';
-import { useOnboarding } from '@/hooks/useOnboarding';
 
-const EDITOR_TOUR = [
-  {
-    target: null,
-    icon: '🎯',
-    title: "Let's create your first post!",
-    content: "This is the post editor. We'll walk you through each section so you can publish your first piece with ease.",
-  },
-  {
-    target: '[data-tour="editor-title"]',
-    icon: '📝',
-    title: 'Start with a Great Title',
-    content: 'Give your post a clear, descriptive title. This is the first thing readers will see.',
-  },
-  {
-    target: '[data-tour="editor-description"]',
-    icon: '💬',
-    title: 'Add a Short Description',
-    content: 'Write a 10–100 word summary. It appears in search results and post previews — keep it punchy.',
-  },
-  {
-    target: '[data-tour="editor-content"]',
-    icon: '✍️',
-    title: 'Write Your Content',
-    content: 'Use the rich text editor below to write and format your article. The toolbar lets you add headings, images, lists, and links.',
-  },
-  {
-    target: '[data-tour="editor-save"]',
-    icon: '🚀',
-    title: 'Save & Submit',
-    content: '"Save as draft" preserves your work any time. When the post is ready, use the sidebar to submit it for admin review.',
-  },
-];
 
 const defaultValues = {
   post_type: 'event',
@@ -141,9 +107,6 @@ function PostEditorPage() {
   const [isReadOnlyMode, setIsReadOnlyMode] = useState(false);
   const [targetCollegeId, setTargetCollegeId] = useState('');
   const submittedSnapshotRef = useRef(null);
-  const tourCheckedRef = useRef(false);
-  const [editorTourOpen, setEditorTourOpen] = useState(false);
-  const { hasSeen, markSeen } = useOnboarding(user?.id);
 
   const {
     register,
@@ -638,19 +601,6 @@ function PostEditorPage() {
     };
   }, []);
 
-  // Show editor tour for staff users on their first new-post creation.
-  // Guard on user?.id so the check never runs before auth has loaded.
-  useEffect(() => {
-    if (loading || !user?.id || tourCheckedRef.current) return;
-    if (isAdmin) return;
-    if (postId) return; // only for brand-new posts, not editing
-    tourCheckedRef.current = true;
-    if (!hasSeen('post-editor')) {
-      const t = setTimeout(() => setEditorTourOpen(true), 700);
-      return () => clearTimeout(t);
-    }
-  }, [loading, user?.id, isAdmin, postId, hasSeen]); // eslint-disable-line react-hooks/exhaustive-deps
-
   if (loading) {
     return (
       <div className="cms-editor">
@@ -662,14 +612,7 @@ function PostEditorPage() {
     );
   }
 
-  const handleEditorTourFinish = () => {
-    markSeen('post-editor');
-    setEditorTourOpen(false);
-  };
-
   return (
-    <>
-    <OnboardingTour steps={EDITOR_TOUR} isOpen={editorTourOpen} onFinish={handleEditorTourFinish} />
     <form
       className="cms-editor"
       onSubmit={handleSubmit(() => persistPost('draft'))}
@@ -695,7 +638,7 @@ function PostEditorPage() {
       />
       {/* ── Title Bar ── */}
       <div className="cms-editor__title-bar">
-        <label className="cms-editor__title-field" data-tour="editor-title">
+        <label className="cms-editor__title-field">
           <span className="cms-editor__title-label">Title</span>
           <input
             type="text"
@@ -705,7 +648,7 @@ function PostEditorPage() {
             {...register('title', { required: 'Title is required.' })}
           />
         </label>
-        <div className="cms-editor__title-actions" data-tour="editor-save">
+        <div className="cms-editor__title-actions">
           {!isNewPostRoute && (
             <CustomSelect
               className="cms-editor__type-select"
@@ -759,7 +702,7 @@ function PostEditorPage() {
       )}
 
       {/* ── Tab Bar ── */}
-      <div className="cms-editor__description-bar" data-tour="editor-description">
+      <div className="cms-editor__description-bar">
         <label className="cms-editor__description-field">
           <span className="cms-editor__description-label">Description</span>
           <textarea
@@ -804,7 +747,7 @@ function PostEditorPage() {
           {activeTab === 'content' && (
             <>
               {/* Text Block */}
-              <div className="cms-block" data-tour="editor-content">
+              <div className="cms-block">
                 <div className="cms-block__header">
                   <div className="cms-block__title-group">
                     <span className="cms-block__indicator" />
@@ -1192,7 +1135,6 @@ function PostEditorPage() {
       </div>
       </fieldset>
     </form>
-    </>
   );
 }
 

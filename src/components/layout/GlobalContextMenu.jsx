@@ -24,14 +24,13 @@ function buildShortcut(parts) {
 function GlobalContextMenu() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, selectedCollegeName, signOut } = useAuth();
+  const { signOut } = useAuth();
   const [menuState, setMenuState] = useState({
     open: false,
     x: 0,
     y: 0,
   });
   const [customActionGroups, setCustomActionGroups] = useState(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const menuRef = useRef(null);
   const skipNextNativeContextMenuRef = useRef(false);
 
@@ -103,7 +102,7 @@ function GlobalContextMenu() {
           id: 'settings',
           label: 'Settings',
           shortcut: shortcuts.settings,
-          onSelect: () => setSettingsOpen(true),
+          onSelect: () => navigate('/settings'),
         },
       ],
       ...(isEditorRoute
@@ -181,7 +180,6 @@ function GlobalContextMenu() {
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         closeContextMenu();
-        setSettingsOpen(false);
         return;
       }
 
@@ -207,7 +205,7 @@ function GlobalContextMenu() {
 
       if (!event.altKey && loweredKey === ',') {
         event.preventDefault();
-        setSettingsOpen(true);
+        navigate('/settings');
         closeContextMenu();
         return;
       }
@@ -295,68 +293,6 @@ function GlobalContextMenu() {
         </div>
       )}
 
-      {settingsOpen && (
-        <div
-          className="context-settings-sheet"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Quick settings"
-        >
-          <button
-            type="button"
-            className="context-settings-sheet__backdrop"
-            aria-label="Close settings"
-            onClick={() => setSettingsOpen(false)}
-          />
-
-          <div className="context-settings-sheet__panel">
-            <div className="context-settings-sheet__topbar">
-              <div>
-                <span className="context-settings-sheet__eyebrow">Settings</span>
-                <h3>Workspace Preferences</h3>
-              </div>
-              <button
-                type="button"
-                className="context-settings-sheet__close"
-                onClick={() => setSettingsOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="context-settings-sheet__section">
-              <span className="context-settings-sheet__label">Current Workspace</span>
-              <strong>{isAuthenticated ? selectedCollegeName : 'Guest workspace'}</strong>
-            </div>
-
-            <div className="context-settings-sheet__section">
-              <span className="context-settings-sheet__label">Shortcut Suggestions</span>
-              <div className="context-settings-sheet__shortcuts">
-                <div className="context-settings-sheet__shortcut-row">
-                  <span>Reload</span>
-                  <kbd>{shortcuts.reload}</kbd>
-                </div>
-                <div className="context-settings-sheet__shortcut-row">
-                  <span>Create event</span>
-                  <kbd>{shortcuts.createEvent}</kbd>
-                </div>
-                <div className="context-settings-sheet__shortcut-row">
-                  <span>Create blog</span>
-                  <kbd>{shortcuts.createBlog}</kbd>
-                </div>
-                <div className="context-settings-sheet__shortcut-row">
-                  <span>Open settings</span>
-                  <kbd>{shortcuts.settings}</kbd>
-                </div>
-                <div className="context-settings-sheet__shortcut-row">
-                  <span>Log out</span>
-                  <kbd>{shortcuts.logout}</kbd>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>,
     document.body,
   );

@@ -18,6 +18,7 @@ const ReviewQueuePage = lazy(() => import('@/pages/admin/ReviewQueuePage'));
 const DraftsPage = lazy(() => import('@/pages/posts/DraftsPage'));
 const GalleryPage = lazy(() => import('@/pages/media/GalleryPage'));
 const UploadsPage = lazy(() => import('@/pages/media/UploadsPage'));
+const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'));
 
 function AppRoutes() {
   return (
@@ -61,6 +62,7 @@ function AppRoutes() {
         <Route path="drafts" element={<DraftsPage />} />
         <Route path="gallery" element={<GalleryPage />} />
         <Route path="uploads" element={<UploadsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route
           path="review"
           element={

@@ -119,3 +119,31 @@ export async function updateSelectedCollege({ userId, collegeId }) {
 
   return cacheProfile(data);
 }
+
+export async function updateProfileName({ userId, fullName }) {
+  const client = requireSupabase();
+  const normalizedName = fullName.trim();
+  const { data, error } = await client
+    .from('profiles')
+    .update({
+      full_name: normalizedName,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId)
+    .select('*')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  await logAuditEvent({
+    actor_id: userId,
+    action: 'profile.name_updated',
+    entity_type: 'profile',
+    entity_id: userId,
+    metadata: { full_name: normalizedName },
+  });
+
+  return cacheProfile(data);
+}
