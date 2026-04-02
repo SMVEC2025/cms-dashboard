@@ -18,6 +18,8 @@ function CustomSelect({
   keepEditorFocus = false,
 }) {
   const [open, setOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
+  const [panelStyle, setPanelStyle] = useState(null);
   const ref = useRef(null);
   const selected = options.find(o => String(o.value) === String(value));
 
@@ -28,6 +30,42 @@ function CustomSelect({
     }
     document.addEventListener('mousedown', handleOutside);
     return () => document.removeEventListener('mousedown', handleOutside);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      setOpenUpward(false);
+      setPanelStyle(null);
+      return;
+    }
+
+    function updatePanelPosition() {
+      if (!ref.current) return;
+
+      const rect = ref.current.getBoundingClientRect();
+      const gap = 5;
+      const viewportPadding = 16;
+      const idealHeight = 260;
+      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+      const spaceAbove = rect.top - viewportPadding;
+      const shouldOpenUpward = spaceBelow < 180 && spaceAbove > spaceBelow;
+      const availableHeight = Math.max(
+        120,
+        shouldOpenUpward ? spaceAbove - gap : spaceBelow - gap,
+      );
+
+      setOpenUpward(shouldOpenUpward);
+      setPanelStyle({ maxHeight: `${Math.min(idealHeight, availableHeight)}px` });
+    }
+
+    updatePanelPosition();
+    window.addEventListener('resize', updatePanelPosition);
+    window.addEventListener('scroll', updatePanelPosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updatePanelPosition);
+      window.removeEventListener('scroll', updatePanelPosition, true);
+    };
   }, [open]);
 
   // Bucket options into ordered groups
@@ -49,6 +87,7 @@ function CustomSelect({
         'ui-select',
         `ui-select--${size}`,
         open && 'is-open',
+        open && openUpward && 'is-open-upward',
         disabled && 'is-disabled',
         className,
       )}
@@ -71,7 +110,7 @@ function CustomSelect({
       </button>
 
       {open && (
-        <div className="ui-select__panel" role="listbox">
+        <div className="ui-select__panel" role="listbox" style={panelStyle || undefined}>
           {groups.map((group, gi) => (
             <div
               key={gi}

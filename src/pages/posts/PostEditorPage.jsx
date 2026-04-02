@@ -28,6 +28,7 @@ const defaultValues = {
   featured_image_url: '',
   event_date: '',
   event_time: '',
+  department: '',
   location: '',
   venue: '',
   category: 'Announcement',
@@ -41,6 +42,53 @@ const TABS = [
   { id: 'meta', label: 'Meta' },
 ];
 const CUSTOM_CATEGORY_VALUE = '__custom_category__';
+const GENERAL_DEPARTMENT = 'General';
+
+function normalizeDepartments(departments) {
+  if (!Array.isArray(departments)) {
+    return [];
+  }
+
+  return departments
+    .map((department) => {
+      if (!department) {
+        return '';
+      }
+
+      if (typeof department === 'object') {
+        return (department.shortcode || department.shortCode || department.name || '').trim();
+      }
+
+      if (typeof department !== 'string') {
+        return '';
+      }
+
+      const trimmedDepartment = department.trim();
+      if (!trimmedDepartment) {
+        return '';
+      }
+
+      if (trimmedDepartment.startsWith('{') && trimmedDepartment.endsWith('}')) {
+        try {
+          const parsedDepartment = JSON.parse(trimmedDepartment);
+          return (
+            parsedDepartment.shortcode
+            || parsedDepartment.shortCode
+            || parsedDepartment.name
+            || ''
+          ).trim();
+        } catch {
+          return trimmedDepartment;
+        }
+      }
+
+      return trimmedDepartment;
+    })
+    .filter(Boolean)
+    .filter((department, index, items) => (
+      items.findIndex((item) => item.toLowerCase() === department.toLowerCase()) === index
+    ));
+}
 
 function countWords(value) {
   return value.trim().split(/\s+/).filter(Boolean).length;
@@ -62,6 +110,7 @@ function buildSnapshot(fields, contentHtml, collegeId = '') {
     featured_image_url: fields.featured_image_url || '',
     event_date: fields.event_date || '',
     event_time: fields.event_time || '',
+    department: fields.department || '',
     location: fields.location || '',
     venue: fields.venue || '',
     category: fields.category || '',
@@ -141,6 +190,7 @@ function PostEditorPage() {
   const watchedValues = watch();
   const selectedPostType = watchedValues.post_type || defaultValues.post_type;
   const selectedCategory = watchedValues.category || '';
+  const selectedDepartment = watchedValues.department || '';
   const isEventPost = selectedPostType === 'event';
   const isBlogPost = selectedPostType === 'blog';
   const eventDateField = register('event_date', {
@@ -183,6 +233,18 @@ function PostEditorPage() {
     value: college.id,
     label: college.name,
   }));
+  const activeCollegeId = targetCollegeId || existingPost?.college_id || profile?.selected_college_id || '';
+  const activeCollege = colleges.find((college) => college.id === activeCollegeId);
+  const availableDepartments = normalizeDepartments(activeCollege?.departments);
+  const departmentOptions = availableDepartments.length
+    ? [
+        { value: GENERAL_DEPARTMENT, label: GENERAL_DEPARTMENT },
+        ...availableDepartments
+          .filter((department) => department.toLowerCase() !== GENERAL_DEPARTMENT.toLowerCase())
+          .map((department) => ({ value: department, label: department })),
+      ]
+    : [];
+  const hasDepartmentOptions = departmentOptions.length > 0;
 
   const navigateToEditor = (savedPost) => {
     const editBase = savedPost.post_type === 'blog' ? '/blogs' : '/posts';
@@ -239,6 +301,7 @@ function PostEditorPage() {
         setValue('featured_image_url', post.featured_image_url || '');
         setValue('event_date', post.event_date || '');
         setValue('event_time', post.event_time || '');
+        setValue('department', post.department || '');
         setValue('location', post.location || '');
         setValue('venue', post.venue || '');
         setValue('category', post.category || 'Announcement');
@@ -258,6 +321,7 @@ function PostEditorPage() {
             featured_image_url: post.featured_image_url || '',
             event_date: post.event_date || '',
             event_time: post.event_time || '',
+            department: post.department || '',
             location: post.location || '',
             venue: post.venue || '',
             category: post.category || 'Announcement',
@@ -333,6 +397,35 @@ function PostEditorPage() {
     profile?.selected_college_id,
     selectedCollegeId,
     targetCollegeId,
+  ]);
+
+  useEffect(() => {
+    if (!activeCollegeId) {
+      return;
+    }
+
+    if (hasDepartmentOptions) {
+      const isValidSelection = departmentOptions.some((option) => option.value === selectedDepartment);
+      if (!isValidSelection) {
+        setValue('department', GENERAL_DEPARTMENT, {
+          shouldDirty: Boolean(postId),
+        });
+      }
+      return;
+    }
+
+    if (selectedDepartment) {
+      setValue('department', '', {
+        shouldDirty: Boolean(postId),
+      });
+    }
+  }, [
+    activeCollegeId,
+    departmentOptions,
+    hasDepartmentOptions,
+    postId,
+    selectedDepartment,
+    setValue,
   ]);
 
   const uploadFeaturedAsset = async (file) => {
@@ -504,6 +597,9 @@ function PostEditorPage() {
 
     const shouldAssignAdminAsAuthor = Boolean(postId && isAdmin && existingPost?.id);
     const shouldDirectPublish = Boolean(mode === 'submit' && isAdmin);
+    const resolvedDepartment = hasDepartmentOptions
+      ? (values.department || GENERAL_DEPARTMENT)
+      : null;
 
     const payload = {
       id: postId,
@@ -519,6 +615,7 @@ function PostEditorPage() {
       content_json: contentState.json,
       event_date: isEventPost ? values.event_date || null : null,
       event_time: isEventPost ? values.event_time || null : null,
+      department: resolvedDepartment,
       location: isEventPost ? values.location || null : null,
       venue: isEventPost ? values.venue || null : null,
       category: values.category || null,
@@ -1078,6 +1175,27 @@ function PostEditorPage() {
                 <span className="cms-sidebar-college">{collegeDisplayName}</span>
               )}
             </div>
+
+            {hasDepartmentOptions && (
+              <div className="cms-sidebar-section">
+                <span className="cms-sidebar-section__label">Department</span>
+                <CustomSelect
+                  value={selectedDepartment}
+                  onChange={(value) => {
+                    setValue('department', value, {
+                      shouldDirty: true,
+                      shouldTouch: true,
+                    });
+                  }}
+                  options={departmentOptions}
+                  placeholder="Select department"
+                  disabled={isReadOnlyMode}
+                />
+                <small className="helper-text">
+                  Choose {GENERAL_DEPARTMENT} for college-wide content.
+                </small>
+              </div>
+            )}
 
             {isBlogPost && (
               <div className="cms-sidebar-section">

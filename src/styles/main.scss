@@ -4579,6 +4579,11 @@ textarea {
   overflow-y: auto;
 }
 
+.ui-select.is-open-upward .ui-select__panel {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+
 .ui-select__group {
   display: grid;
 }
@@ -6906,7 +6911,11 @@ textarea {
 
 .cms-sidebar-card .ui-select {
   position: relative;
-  z-index: 5;
+  z-index: 1;
+}
+
+.cms-sidebar-card .ui-select.is-open {
+  z-index: 60;
 }
 
 .cms-sidebar-card .ui-select__panel {
