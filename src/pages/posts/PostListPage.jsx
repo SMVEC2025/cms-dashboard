@@ -124,7 +124,6 @@ function PostListPage() {
           search: deferredSearch,
           postType: isBlogsView ? 'blog' : undefined,
           sourceTable: isBlogsView ? 'blogs' : 'posts',
-          createdByStaffOnly: isAdminView,
         });
         if (active) {
           setPosts(data);

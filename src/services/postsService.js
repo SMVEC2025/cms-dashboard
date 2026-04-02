@@ -138,13 +138,17 @@ async function resolveSourceTable(client, postId, preferredSourceTable) {
   throw new Error('Content not found.');
 }
 
-async function countPosts({ role, userId, collegeId, status }) {
+async function countPosts({ role, userId, collegeId, status, postType }) {
   const client = requireSupabase();
   let query = client.from('post_overview').select('id', { count: 'exact', head: true });
   query = applyPostScope(query, { role, userId, collegeId });
 
   if (status) {
     query = query.eq('status', status);
+  }
+
+  if (postType) {
+    query = query.eq('post_type', postType);
   }
 
   const { count, error } = await query;
@@ -182,6 +186,12 @@ export async function getDashboardData({ role, userId, collegeId }) {
     drafts,
     pendingPosts,
     publishedPosts,
+    totalEvents,
+    publishedEvents,
+    totalNews,
+    publishedNews,
+    totalBlogs,
+    publishedBlogs,
     { data: recentPosts, error: recentError },
     reviewQueueResult,
   ] = await Promise.all([
@@ -189,6 +199,12 @@ export async function getDashboardData({ role, userId, collegeId }) {
     countPosts({ role, userId, collegeId, status: POST_STATUS.DRAFT }),
     countPosts({ role, userId, collegeId, status: POST_STATUS.SUBMITTED }),
     countPosts({ role, userId, collegeId, status: POST_STATUS.PUBLISHED }),
+    countPosts({ role, userId, collegeId, postType: 'event' }),
+    countPosts({ role, userId, collegeId, postType: 'event', status: POST_STATUS.PUBLISHED }),
+    countPosts({ role, userId, collegeId, postType: 'news' }),
+    countPosts({ role, userId, collegeId, postType: 'news', status: POST_STATUS.PUBLISHED }),
+    countPosts({ role, userId, collegeId, postType: 'blog' }),
+    countPosts({ role, userId, collegeId, postType: 'blog', status: POST_STATUS.PUBLISHED }),
     recentQuery,
     reviewQueueQuery ?? Promise.resolve({ data: [], error: null }),
   ]);
@@ -207,6 +223,20 @@ export async function getDashboardData({ role, userId, collegeId }) {
       drafts,
       pendingPosts,
       publishedPosts,
+    },
+    contentBreakdown: {
+      event: {
+        total: totalEvents,
+        published: publishedEvents,
+      },
+      news: {
+        total: totalNews,
+        published: publishedNews,
+      },
+      blog: {
+        total: totalBlogs,
+        published: publishedBlogs,
+      },
     },
     recentPosts: recentPosts || [],
     reviewQueue: reviewQueueResult?.data || [],

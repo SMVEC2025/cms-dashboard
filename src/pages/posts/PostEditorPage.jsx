@@ -232,6 +232,7 @@ function PostEditorPage() {
         setLoading(true);
         const post = await getPostById(postId, { sourceTable });
         setExistingPost(post);
+        setTargetCollegeId(post.college_id || '');
         setValue('post_type', post.post_type);
         setValue('title', post.title);
         setValue('slug', post.slug);
@@ -318,12 +319,7 @@ function PostEditorPage() {
   }, [watchedValues, contentState, isLocked, targetCollegeId]);
 
   useEffect(() => {
-    if (existingPost?.college_id) {
-      setTargetCollegeId(existingPost.college_id);
-      return;
-    }
-
-    if (targetCollegeId) {
+    if (postId || targetCollegeId) {
       return;
     }
 
@@ -333,7 +329,7 @@ function PostEditorPage() {
     }
   }, [
     colleges,
-    existingPost?.college_id,
+    postId,
     profile?.selected_college_id,
     selectedCollegeId,
     targetCollegeId,

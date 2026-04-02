@@ -140,17 +140,21 @@ function DashboardPage() {
 
   const recentPosts = dashboard?.recentPosts || [];
   const reviewQueue = dashboard?.reviewQueue || [];
+  const contentBreakdown = dashboard?.contentBreakdown || {
+    event: { total: 0, published: 0 },
+    news: { total: 0, published: 0 },
+    blog: { total: 0, published: 0 },
+  };
   const isAdminDashboard = role === ROLES.ADMIN;
   const dashboardItems = isAdminDashboard ? reviewQueue : recentPosts;
   const adminSubmittedItems = reviewQueue.filter((post) => post.status === POST_STATUS.SUBMITTED);
   const activityItems = isAdminDashboard ? adminSubmittedItems : dashboardItems.slice(0, 4);
 
-  // Derive event analytics from recent posts
-  const eventPosts = recentPosts.filter((p) => p.post_type === 'event');
-  const featuredEventPosts = eventPosts.slice(0, 12);
-  const newsPosts = recentPosts.filter((p) => p.post_type === 'news');
-  const blogPosts = recentPosts.filter((p) => p.post_type === 'blog');
-  const maxTypeCount = Math.max(eventPosts.length, newsPosts.length, blogPosts.length, 1);
+  const featuredPosts = recentPosts.slice(0, 6);
+  const eventTotals = contentBreakdown.event;
+  const newsTotals = contentBreakdown.news;
+  const blogTotals = contentBreakdown.blog;
+  const maxTypeCount = Math.max(eventTotals.total, newsTotals.total, blogTotals.total, 1);
 
   const firstName = user?.email?.split('@')[0]?.split('.')[0] || 'there';
   const displayName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
@@ -238,15 +242,15 @@ function DashboardPage() {
             <div className="dashboard-card__header">
               <div>
                 <span className="dashboard-card__eyebrow">Recent content</span>
-                <h3>Latest events in motion</h3>
+                <h3>Latest content in motion</h3>
               </div>
               <Link to="/posts" className="dashboard-card__header-action">
                 View Library
               </Link>
             </div>
             <div className="story-grid story-grid--carousel">
-              {featuredEventPosts.length > 0 ? (
-                featuredEventPosts.map((post) => (
+              {featuredPosts.length > 0 ? (
+                featuredPosts.map((post) => (
                   <div className="story-card" key={post.id}>
                     <div className="story-card__thumb">
                       <img
@@ -269,7 +273,7 @@ function DashboardPage() {
                         </h4>
                       </div>
                       <p className="story-card__category">
-                        {post.category || 'Editorial'} &middot; {selectedCollegeName}
+                        {post.category || 'Editorial'} &middot; {post.college_name || selectedCollegeName}
                       </p>
 
                       <div className="story-card__meta-list">
@@ -287,7 +291,7 @@ function DashboardPage() {
                             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
                             <circle cx="12" cy="10" r="3" />
                           </svg>
-                          <span>{selectedCollegeName}</span>
+                          <span>{post.college_name || selectedCollegeName}</span>
                         </div>
                         <div className="story-card__meta-row">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -306,7 +310,7 @@ function DashboardPage() {
                           to={`${post.post_type === 'blog' ? '/blogs' : '/posts'}/${post.id}/edit`}
                           className="story-card__action"
                         >
-                          Edit Post
+                          {post.post_type === 'blog' ? 'Edit Blog' : 'Edit Post'}
                         </Link>
                       </div>
                     </div>
@@ -323,10 +327,10 @@ function DashboardPage() {
                     </svg>
                   </div>
                   <span className="dashboard-empty__eyebrow">Ready to publish</span>
-                  <h4>No Events yet</h4>
+                  <h4>No content yet</h4>
                   <p>
-                    Publish an event update for {selectedCollegeName}.
-                    Once your first event is available, it will appear in this carousel.
+                    Publish a post or blog for {selectedCollegeName}.
+                    Once your first item is available, it will appear in this carousel.
                   </p>
                   <div className="dashboard-empty__actions">
                     <Link to="/posts/new" className="btn btn--dashed">
@@ -434,11 +438,11 @@ function DashboardPage() {
                 <div className="dash-analytics__bar-group">
                   <div
                     className="dash-analytics__bar dash-analytics__bar--events"
-                    style={{ height: `${(eventPosts.length / maxTypeCount) * 100}%` }}
+                    style={{ height: `${(eventTotals.total / maxTypeCount) * 100}%` }}
                   />
                   <div
                     className="dash-analytics__bar dash-analytics__bar--events-pub"
-                    style={{ height: `${(eventPosts.filter((p) => p.status === 'published').length / maxTypeCount) * 100}%` }}
+                    style={{ height: `${(eventTotals.published / maxTypeCount) * 100}%` }}
                   />
                 </div>
                 <span className="dash-analytics__label">Events</span>
@@ -447,11 +451,11 @@ function DashboardPage() {
                 <div className="dash-analytics__bar-group">
                   <div
                     className="dash-analytics__bar dash-analytics__bar--news"
-                    style={{ height: `${(newsPosts.length / maxTypeCount) * 100}%` }}
+                    style={{ height: `${(newsTotals.total / maxTypeCount) * 100}%` }}
                   />
                   <div
                     className="dash-analytics__bar dash-analytics__bar--news-pub"
-                    style={{ height: `${(newsPosts.filter((p) => p.status === 'published').length / maxTypeCount) * 100}%` }}
+                    style={{ height: `${(newsTotals.published / maxTypeCount) * 100}%` }}
                   />
                 </div>
                 <span className="dash-analytics__label">News</span>
@@ -460,11 +464,11 @@ function DashboardPage() {
                 <div className="dash-analytics__bar-group">
                   <div
                     className="dash-analytics__bar dash-analytics__bar--blogs"
-                    style={{ height: `${(blogPosts.length / maxTypeCount) * 100}%` }}
+                    style={{ height: `${(blogTotals.total / maxTypeCount) * 100}%` }}
                   />
                   <div
                     className="dash-analytics__bar dash-analytics__bar--blogs-pub"
-                    style={{ height: `${(blogPosts.filter((p) => p.status === 'published').length / maxTypeCount) * 100}%` }}
+                    style={{ height: `${(blogTotals.published / maxTypeCount) * 100}%` }}
                   />
                 </div>
                 <span className="dash-analytics__label">Blogs</span>
@@ -484,17 +488,17 @@ function DashboardPage() {
           <div className="dash-analytics__stats">
             <div className="dash-analytics__stat">
               <span className="dash-analytics__stat-dot" style={{ background: '#2d3894' }} />
-              <strong>{eventPosts.length}</strong>
+              <strong>{eventTotals.total}</strong>
               <span>Events</span>
             </div>
             <div className="dash-analytics__stat">
               <span className="dash-analytics__stat-dot" style={{ background: '#3b82f6' }} />
-              <strong>{newsPosts.length}</strong>
+              <strong>{newsTotals.total}</strong>
               <span>News</span>
             </div>
             <div className="dash-analytics__stat">
               <span className="dash-analytics__stat-dot" style={{ background: '#8b5cf6' }} />
-              <strong>{blogPosts.length}</strong>
+              <strong>{blogTotals.total}</strong>
               <span>Blogs</span>
             </div>
           </div>
