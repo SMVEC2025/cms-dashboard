@@ -56,6 +56,7 @@ export const NAV_ITEMS = {
     { to: '/gallery', label: 'Gallery', icon: 'gallery' },
     { to: '/uploads', label: 'Uploads', icon: 'uploads' },
     { to: '/review', label: 'Review Queue', icon: 'review' },
+    { to: '/users/new', label: 'New Staff User', icon: 'userAdd' },
   ],
 };
 

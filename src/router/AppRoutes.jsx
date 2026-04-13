@@ -15,6 +15,7 @@ const DashboardPage = lazy(() => import('@/pages/dashboard/DashboardPage'));
 const PostListPage = lazy(() => import('@/pages/posts/PostListPage'));
 const PostEditorPage = lazy(() => import('@/pages/posts/PostEditorPage'));
 const ReviewQueuePage = lazy(() => import('@/pages/admin/ReviewQueuePage'));
+const UserCreatePage = lazy(() => import('@/pages/admin/UserCreatePage'));
 const DraftsPage = lazy(() => import('@/pages/posts/DraftsPage'));
 const GalleryPage = lazy(() => import('@/pages/media/GalleryPage'));
 const UploadsPage = lazy(() => import('@/pages/media/UploadsPage'));
@@ -68,6 +69,14 @@ function AppRoutes() {
           element={
             <RoleRoute roles={['admin']}>
               <ReviewQueuePage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="users/new"
+          element={
+            <RoleRoute roles={['admin']}>
+              <UserCreatePage />
             </RoleRoute>
           }
         />

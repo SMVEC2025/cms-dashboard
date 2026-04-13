@@ -6,6 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function readEnv(...names: string[]) {
+  for (const name of names) {
+    const value = Deno.env.get(name)?.trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return '';
+}
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -18,10 +29,10 @@ function jsonResponse(body: unknown, status = 200) {
 
 const r2 = new S3Client({
   region: 'auto',
-  endpoint: `https://${Deno.env.get('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
+  endpoint: `https://${readEnv('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
   credentials: {
-    accessKeyId: Deno.env.get('R2_ACCESS_KEY_ID') ?? '',
-    secretAccessKey: Deno.env.get('R2_SECRET_ACCESS_KEY') ?? '',
+    accessKeyId: readEnv('R2_ACCESS_KEY_ID'),
+    secretAccessKey: readEnv('R2_SECRET_ACCESS_KEY'),
   },
 });
 
@@ -42,11 +53,11 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Missing authorization header.' }, 401);
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const bucketName = Deno.env.get('R2_BUCKET_NAME') ?? Deno.env.get('R2_BUCKET') ?? '';
-    const publicBase = Deno.env.get('R2_PUBLIC_URL') ?? Deno.env.get('R2_PUBLIC_BASE_URL') ?? '';
-    const defaultFolder = Deno.env.get('R2_UPLOAD_FOLDER') ?? 'institutional-cms';
+    const supabaseUrl = readEnv('SUPABASE_URL');
+    const serviceRoleKey = readEnv('SUPABASE_SERVICE_ROLE_KEY');
+    const bucketName = readEnv('R2_BUCKET', 'R2_BUCKET_NAME');
+    const publicBase = readEnv('R2_PUBLIC_BASE_URL', 'R2_PUBLIC_URL');
+    const defaultFolder = readEnv('R2_UPLOAD_FOLDER') || 'institutional-cms';
 
     if (!supabaseUrl || !serviceRoleKey) {
       console.error('r2-upload missing supabase secrets', {

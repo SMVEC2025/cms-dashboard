@@ -21,15 +21,26 @@ const upload = multer({
   },
 });
 
+function readEnv(...names) {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return '';
+}
+
 const port = Number(process.env.UPLOAD_SERVER_PORT || 4000);
-const defaultFolder = process.env.R2_UPLOAD_FOLDER || 'institutional-cms';
-const r2AccountId = process.env.R2_ACCOUNT_ID || '';
-const r2AccessKeyId = process.env.R2_ACCESS_KEY_ID || '';
-const r2SecretAccessKey = process.env.R2_SECRET_ACCESS_KEY || '';
-const r2BucketName = process.env.R2_BUCKET_NAME || process.env.R2_BUCKET || '';
-const r2PublicBaseUrl = process.env.R2_PUBLIC_URL || process.env.R2_PUBLIC_BASE_URL || '';
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const defaultFolder = readEnv('R2_UPLOAD_FOLDER') || 'institutional-cms';
+const r2AccountId = readEnv('R2_ACCOUNT_ID');
+const r2AccessKeyId = readEnv('R2_ACCESS_KEY_ID');
+const r2SecretAccessKey = readEnv('R2_SECRET_ACCESS_KEY');
+const r2BucketName = readEnv('R2_BUCKET', 'R2_BUCKET_NAME');
+const r2PublicBaseUrl = readEnv('R2_PUBLIC_BASE_URL', 'R2_PUBLIC_URL');
+const supabaseUrl = readEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
+const supabaseAnonKey = readEnv('SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY');
 
 const r2 = new S3Client({
   region: 'auto',

@@ -4,6 +4,7 @@ const mediaFunctionName = import.meta.env.VITE_SUPABASE_MEDIA_FUNCTION || 'r2-up
 const mediaProvider = (import.meta.env.VITE_MEDIA_PROVIDER || 'r2').trim().toLowerCase();
 const r2SignFunctionName = (import.meta.env.VITE_SUPABASE_R2_SIGN_FUNCTION || 'r2-sign-upload').trim();
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const configuredR2PublicBaseUrl = (import.meta.env.VITE_R2_PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
 const IMAGE_MIME_PREFIX = 'image/';
 const FORCE_WEBP_MIN_BYTES = 1024 * 1024;
 const SESSION_CACHE_TTL_MS = 30 * 1000;
@@ -29,9 +30,15 @@ const FOLDER_COMPRESSION_PRESET = {
 };
 let cachedSession = null;
 let cachedSessionFetchedAt = 0;
+let cachedR2PublicBaseUrl = configuredR2PublicBaseUrl;
 
 function isAbsoluteUrl(value) {
   return /^https?:\/\//i.test(value || '');
+}
+
+function joinUrl(base, path) {
+  if (!base || !path) return '';
+  return `${base.replace(/\/$/, '')}/${String(path).replace(/^\/+/, '')}`;
 }
 
 function shouldProcessImage(file) {
@@ -208,6 +215,45 @@ async function extractFunctionError(error) {
   }
 
   return error?.message || 'Media upload failed.';
+}
+
+async function resolveR2PublicBaseUrl(client) {
+  if (cachedR2PublicBaseUrl) {
+    return cachedR2PublicBaseUrl;
+  }
+
+  if (mediaProvider !== 'r2-direct') {
+    return '';
+  }
+
+  try {
+    const { data, error } = await client.functions.invoke(r2SignFunctionName, {
+      body: {
+        folder: 'uploads',
+        fileName: 'probe.txt',
+        fileType: 'text/plain',
+        fileSize: 1,
+      },
+    });
+
+    if (error || !data?.publicUrl || !data?.key) {
+      return '';
+    }
+
+    const normalizedPublicUrl = String(data.publicUrl).replace(/\/$/, '');
+    const normalizedKey = String(data.key).replace(/^\/+/, '');
+    const marker = `/${normalizedKey}`;
+    const markerIndex = normalizedPublicUrl.lastIndexOf(marker);
+
+    if (markerIndex <= 0) {
+      return '';
+    }
+
+    cachedR2PublicBaseUrl = normalizedPublicUrl.slice(0, markerIndex);
+    return cachedR2PublicBaseUrl;
+  } catch {
+    return '';
+  }
 }
 
 function deriveBucketKey(payload, fallbackFolder) {
@@ -394,11 +440,15 @@ export async function uploadMedia({
   return data;
 }
 
-function mapMediaAsset(asset) {
+function mapMediaAsset(asset, runtimePublicBaseUrl = '') {
+  const url = asset.bucket_key && runtimePublicBaseUrl
+    ? joinUrl(runtimePublicBaseUrl, asset.bucket_key)
+    : asset.public_url;
+
   return {
     id: asset.id,
-    url: asset.public_url,
-    publicUrl: asset.public_url,
+    url,
+    publicUrl: url,
     name: asset.file_name,
     fileName: asset.file_name,
     size: asset.size_bytes || 0,
@@ -407,6 +457,8 @@ function mapMediaAsset(asset) {
     mimeType: asset.mime_type || '',
     uploadedAt: asset.created_at,
     createdAt: asset.created_at,
+    key: asset.bucket_key || '',
+    bucketKey: asset.bucket_key || '',
     context: asset.context,
     folderId: asset.folder_id || null,
     metadata: asset.metadata || {},
@@ -421,7 +473,7 @@ export async function listMediaAssets({
   const client = requireSupabase();
   let query = client
     .from('media_assets')
-    .select('id, public_url, file_name, mime_type, size_bytes, context, folder_id, metadata, created_at')
+    .select('id, bucket_key, public_url, file_name, mime_type, size_bytes, context, folder_id, metadata, created_at')
     .order('created_at', { ascending: false });
 
   if (imageOnly) {
@@ -444,7 +496,8 @@ export async function listMediaAssets({
     throw error;
   }
 
-  return (data || []).map(mapMediaAsset);
+  const runtimePublicBaseUrl = await resolveR2PublicBaseUrl(client);
+  return (data || []).map((asset) => mapMediaAsset(asset, runtimePublicBaseUrl));
 }
 
 export async function deleteMediaAsset(id) {
