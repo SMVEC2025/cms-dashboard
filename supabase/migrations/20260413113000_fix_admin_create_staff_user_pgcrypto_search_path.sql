@@ -1,3 +1,5 @@
+create extension if not exists pgcrypto with schema extensions;
+
 create or replace function public.admin_create_staff_user(
   target_email text,
   target_password text default 'smvec@123'
@@ -135,3 +137,5 @@ $$;
 
 revoke all on function public.admin_create_staff_user(text, text) from public;
 grant execute on function public.admin_create_staff_user(text, text) to authenticated;
+
+select pg_notify('pgrst', 'reload schema');
