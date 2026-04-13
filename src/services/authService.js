@@ -8,7 +8,7 @@ export async function getSession() {
 
   if (error) {
     throw error;
-  }
+  } 
 
   return data.session;
 }
