@@ -2,6 +2,7 @@ import { requireSupabase } from '@/lib/supabase';
 
 export const DEFAULT_STAFF_PASSWORD = 'smvec@123';
 const PRIMARY_CREATE_STAFF_RPC = 'admin_create_staff_user_rpc';
+const LEGACY_CREATE_STAFF_RPC = 'admin_create_staff_user';
 
 function isMissingRpcSignatureError(error) {
   const message = error?.message || '';
@@ -26,10 +27,17 @@ export async function createStaffUser({ email, password = DEFAULT_STAFF_PASSWORD
     target_password: normalizedPassword,
   });
 
+  if (error && isMissingRpcSignatureError(error)) {
+    ({ data, error } = await invokeCreateStaffRpc(client, LEGACY_CREATE_STAFF_RPC, {
+      target_email: normalizedEmail,
+      target_password: normalizedPassword,
+    }));
+  }
+
   if (error) {
     if (isMissingRpcSignatureError(error)) {
       throw new Error(
-        'Database function admin_create_staff_user_rpc is missing in your Supabase project. Run migration 20260413110000 and reload PostgREST schema cache.',
+        'Database functions for staff creation are missing in your Supabase project. Run migrations 20260407100000 and 20260413110000, then reload PostgREST schema cache.',
       );
     }
     throw error;

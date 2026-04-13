@@ -12,12 +12,15 @@ const COLLEGE_BACKGROUND_IMAGES = {
   'smvec-centre-of-legal-education': 'https://law.smvec.ac.in/assets/img/hero/hero-bg-2.jpg',
   'smvec-school-of-agricultural-science': 'https://agri.smvec.ac.in/assets/img/hero/hero-11.webp',
   'smvec-allied-health-science': 'https://mbbscouncilcdn.s3.amazonaws.com/wp-content/uploads/2020/03/Sri-Manakula-Vinayagar-Medical-College-and-Hospital-Pondicherry-Overall-Campus.jpg',
-  'smv-school': 'https://marksmendaily.com/wp-content/uploads/2023/04/24059_SMV-Ipl1PR.jpeg',
+  'smv-school': 'https://arts.smvec.ac.in/assets/img/image/Sri_Manakula_Vinayagar_Engineering_College.webp',
   'takshashila-engineering-college': 'https://cache.careers360.mobi/media/colleges/social-media/media-gallery/63710/2026/3/10/Campus%20View%20of%20Takshashila%20Medical%20College%20Villupuram_Campus-View.jpg',
   'takshashila-medical-college': 'https://cache.careers360.mobi/media/colleges/social-media/media-gallery/63710/2026/3/10/Campus%20View%20of%20Takshashila%20Medical%20College%20Villupuram_Campus-View.jpg',
   'smvmch-college-and-hospital': 'https://smvmch.ac.in/images/AboutAS/about.jpg',
   'mvit': 'https://upload.wikimedia.org/wikipedia/commons/4/4f/Mvitimage.jpg',
   'mailam-engineering-college': 'https://mailamengg.ac.in/wp-content/uploads/2026/03/Mailam-College.png',
+  'smv-arch':'https://arts.smvec.ac.in/assets/img/image/Sri_Manakula_Vinayagar_Engineering_College.webp',
+  'SMVEC-pharmacy':'https://arts.smvec.ac.in/assets/img/image/Sri_Manakula_Vinayagar_Engineering_College.webp',
+  'sop-school-of-physiotherapy':'https://arts.smvec.ac.in/assets/img/image/Sri_Manakula_Vinayagar_Engineering_College.webp',
 };
 
 function getCollegeBackground(collegeId) {
