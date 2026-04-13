@@ -10,9 +10,12 @@ function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { signIn } = useAuth();
+  const adminSupportEmail = 'cms@smvec.ac.in';
+  const supportMailTo = `mailto:${adminSupportEmail}?subject=${encodeURIComponent('CMS Password Reset Request')}`;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showForgotPasswordNotice, setShowForgotPasswordNotice] = useState(false);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -97,10 +100,26 @@ function LoginPage() {
                 <input type="checkbox" />
                 <span>Remember Me</span>
               </label>
-              <a href="#" className="login-page__forgot-link" onClick={(e) => e.preventDefault()}>
+              <a
+                href="#"
+                className="login-page__forgot-link"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setShowForgotPasswordNotice(true);
+                }}
+              >
                 Forgot Your Password?
               </a>
             </div>
+
+            {showForgotPasswordNotice && (
+              <div className="login-page__forgot-notice" role="status" aria-live="polite">
+                <p className="login-page__forgot-notice-title">Contact admin for password reset</p>
+                <a href={supportMailTo} className="login-page__forgot-notice-link">
+                  {adminSupportEmail}
+                </a>
+              </div>
+            )}
 
             <button type="submit" className="login-page__submit" disabled={!isSupabaseConfigured || submitting}>
               {submitting ? (
@@ -114,9 +133,9 @@ function LoginPage() {
             </button>
           </form>
 
-          <p className="login-page__footer-text">
+          {/* <p className="login-page__footer-text">
             Don&apos;t Have An Account? <a href="#" onClick={(e) => e.preventDefault()}>Register Now.</a>
-          </p>
+          </p> */}
         </div>
 
         <div className="login-page__copyright">

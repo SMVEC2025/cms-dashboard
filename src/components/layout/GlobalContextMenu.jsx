@@ -25,6 +25,7 @@ function GlobalContextMenu() {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut } = useAuth();
+  const isLoginRoute = location.pathname === '/login';
   const [menuState, setMenuState] = useState({
     open: false,
     x: 0,
@@ -143,6 +144,12 @@ function GlobalContextMenu() {
     : defaultActionGroups;
 
   useEffect(() => {
+    if (isLoginRoute) {
+      setCustomActionGroups(null);
+      setMenuState((current) => ({ ...current, open: false }));
+      return undefined;
+    }
+
     const handleContextMenu = (event) => {
       if (skipNextNativeContextMenuRef.current) {
         skipNextNativeContextMenuRef.current = false;
@@ -234,7 +241,11 @@ function GlobalContextMenu() {
       window.removeEventListener('scroll', handleViewportChange, true);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [navigate, signOut]);
+  }, [isLoginRoute, navigate, signOut]);
+
+  if (isLoginRoute) {
+    return null;
+  }
 
   return createPortal(
     <>

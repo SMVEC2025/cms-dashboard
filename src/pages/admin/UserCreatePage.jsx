@@ -58,10 +58,7 @@ function UserCreatePage() {
           <div>
             <span className="eyebrow">Admin</span>
             <h3>Create staff user</h3>
-            <p>
-              This creates a new login in Supabase Auth and a matching profile with role{' '}
-              <strong>staff</strong>.
-            </p>
+
           </div>
         </div>
 

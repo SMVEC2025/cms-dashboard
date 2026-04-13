@@ -974,6 +974,35 @@ kbd {
   color: #232e7a;
 }
 
+.login-page__forgot-notice {
+  display: grid;
+  gap: 0.28rem;
+  margin-top: -0.2rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+}
+
+.login-page__forgot-notice-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #3730a3;
+}
+
+.login-page__forgot-notice-link {
+  width: fit-content;
+  font-size: 0.84rem;
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.login-page__forgot-notice-link:hover {
+  text-decoration: underline;
+}
+
 .login-page__submit {
   display: flex;
   align-items: center;
@@ -10531,6 +10560,7 @@ body.pv-body-page {
   gap: 0;
   padding: 0;
   overflow: hidden;
+  margin-top: 2rem;
 }
 
 .staff-users-page__panel .panel__header {
